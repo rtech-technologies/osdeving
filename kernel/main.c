@@ -9,243 +9,145 @@
 #include "../include/system.h"
 #include "../include/io.h"
 
-// --- Kernel Core (Independent of UEFI) ---
-
 #define MAX_SERVICES 32
+#define SHELL_BUFFER_SIZE 65536
+#define KERNEL_HEAP_SIZE (4 * 1024 * 1024)
+
 static service_init_t services[MAX_SERVICES];
 static UINTN service_count = 0;
 static int running = 1;
-static boot_params_t* kernel_params = NULL;
+static boot_params_t* kparams = NULL;
+static syscall_table_t ksyscalls;
+
+// --- Registry & Events ---
 
 void register_service(service_init_t init_func) {
-    if (service_count < MAX_SERVICES) {
-        services[service_count++] = init_func;
-    }
+    if (service_count < MAX_SERVICES) services[service_count++] = init_func;
 }
 
 static void dispatch_init(event_t event) {
     if (event == EVENT_INIT) {
-        for (UINTN i = 0; i < service_count; i++) {
-            services[i]();
-        }
+        for (UINTN i = 0; i < service_count; i++) services[i]();
     }
 }
 
 static void handle_exit(event_t event) {
-    if (event == EVENT_EXIT) {
-        running = 0;
-    }
+    if (event == EVENT_EXIT) running = 0;
 }
 
 void kernel_exit() {
-    running = 0;
+    trigger(EVENT_EXIT);
 }
 
-typedef int (*program_main_t)(syscall_table_t*);
+// --- Epic Kernel Core ---
 
-#define SHELL_BUFFER_SIZE 65536
-#define KERNEL_HEAP_SIZE (4 * 1024 * 1024)
+void stup(boot_params_t* params) {
+    kparams = params;
 
-static syscall_table_t global_syscall_table;
-
-void kernel_main(boot_params_t* params) {
-    kernel_params = params;
-
-    // 1. Service Registration
+    // 1. Service List
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
     register_service(fs_init);
 
-    // 2. Initialization Ritual
+    // 2. Setup Events
+    event_init();
+    register_event_handler(dispatch_init);
+    register_event_handler(handle_exit);
+
+    // 3. System Ritual
     trigger(EVENT_INIT);
 
-    // 3. Setup Syscall Table for Programs
-    global_syscall_table.print = print;
-    global_syscall_table.alloc = alloc;
-    global_syscall_table.free = free;
-    global_syscall_table.fread = fread;
-    global_syscall_table.fwrite = fwrite;
-    global_syscall_table.wait_for_key = wait_for_key;
-    global_syscall_table.read_key = read_key;
-    global_syscall_table.exit = kernel_exit;
+    // 4. Syscall Table
+    ksyscalls.print = print;
+    ksyscalls.alloc = alloc;
+    ksyscalls.free = free;
+    ksyscalls.fread = fread;
+    ksyscalls.fwrite = fwrite;
+    ksyscalls.wait_for_key = wait_for_key;
+    ksyscalls.read_key = read_key;
+    ksyscalls.input = input;
+    ksyscalls.exit = kernel_exit;
+}
 
-    // 4. Early Diagnostics
-    print("Kernel reached main loop (Graphics Mode)\n");
+void main() {
+    print("EpicOS Kernel v1.0\n");
+    void* buffer = alloc(SHELL_BUFFER_SIZE);
 
-    if (memory_self_test() != 0) {
-        print("CRITICAL: Memory self-test failed!\n");
-        while(1);
-    }
-
-    void* shell_buffer = alloc(SHELL_BUFFER_SIZE);
-
-    // 5. Main Event Loop
     while (running) {
-        if (shell_buffer) {
-            static int shell_loaded = 0;
-            if (!shell_loaded) {
-                INTN size = fread("/shell.bin", shell_buffer, SHELL_BUFFER_SIZE);
-                if (size > 0) {
-                    shell_loaded = 1;
-                } else {
-                    print("Failed to load shell from disk\n");
-                }
-            }
-
-            if (shell_loaded) {
-                program_main_t shell_main = (program_main_t)shell_buffer;
-                shell_main(&global_syscall_table);
-                if (running) {
-                    print("Program returned. Press any key to reload shell...\n");
-                    wait_for_key();
-                    shell_loaded = 0;
-                }
-            } else {
-                trigger(EVENT_MAIN);
-                for (volatile int i = 0; i < 10000000; i++);
+        if (fread("/shell.bin", buffer, SHELL_BUFFER_SIZE) > 0) {
+            typedef int (*shell_main_t)(syscall_table_t*);
+            ((shell_main_t)buffer)(&ksyscalls);
+            if (running) {
+                print("\nRestarting shell in 3 seconds...\n");
+                for (volatile int i=0; i<30000000; i++);
             }
         } else {
-            print("Memory allocation for shell failed\n");
-            trigger(EVENT_MAIN);
-            for (volatile int i = 0; i < 10000000; i++);
+            char cmd[128];
+            input("os> ", cmd, 128);
+            if (cmd[0]) { print("Unknown: "); print(cmd); print("\n"); }
         }
-
-        if (running) {
-            trigger(EVENT_MAIN);
-        }
+        trigger(EVENT_MAIN);
     }
 
-    // 6. Cleanup Ritual
     trigger(EVENT_CLEANUP);
-    trigger(EVENT_EXIT);
-
-    print("Kernel shutdown complete.\n");
+    print("Kernel terminated.\n");
 }
 
-boot_params_t* get_boot_params() {
-    return kernel_params;
-}
+boot_params_t* get_boot_params() { return kparams; }
 
-// --- Bootloader (UEFI Specific) ---
+// --- UEFI Entry ---
 
-static void* efi_load_file(EFI_HANDLE image, const CHAR16* path, UINTN* out_size) {
-    EFI_LOADED_IMAGE_PROTOCOL* loaded_image;
+static void* load_file(EFI_HANDLE img, const CHAR16* path, UINTN* sz) {
+    EFI_LOADED_IMAGE_PROTOCOL* li;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* fs;
-    EFI_FILE_PROTOCOL* root;
-    EFI_FILE_PROTOCOL* file;
-    EFI_GUID loaded_image_protocol = LOADED_IMAGE_PROTOCOL;
-    EFI_GUID fs_protocol = SIMPLE_FILE_SYSTEM_PROTOCOL;
+    EFI_FILE_PROTOCOL* root, *f;
+    EFI_GUID li_g = LOADED_IMAGE_PROTOCOL, fs_g = SIMPLE_FILE_SYSTEM_PROTOCOL;
 
-    EFI_STATUS status = uefi_call_wrapper(ST->BootServices->HandleProtocol, 3, image, &loaded_image_protocol, (void**)&loaded_image);
-    if (EFI_ERROR(status)) return NULL;
+    if (EFI_ERROR(uefi_call_wrapper(ST->BootServices->HandleProtocol, 3, img, &li_g, (void**)&li))) return NULL;
+    if (EFI_ERROR(uefi_call_wrapper(ST->BootServices->HandleProtocol, 3, li->DeviceHandle, &fs_g, (void**)&fs))) return NULL;
+    if (uefi_call_wrapper(fs->OpenVolume, 2, fs, &root) != EFI_SUCCESS) return NULL;
+    if (uefi_call_wrapper(root->Open, 5, root, &f, (CHAR16*)path, EFI_FILE_MODE_READ, 0) != EFI_SUCCESS) return NULL;
 
-    status = uefi_call_wrapper(ST->BootServices->HandleProtocol, 3, loaded_image->DeviceHandle, &fs_protocol, (void**)&fs);
-    if (EFI_ERROR(status)) return NULL;
-
-    status = uefi_call_wrapper(fs->OpenVolume, 2, fs, &root);
-    if (EFI_ERROR(status)) return NULL;
-
-    status = uefi_call_wrapper(root->Open, 5, root, &file, (CHAR16*)path, EFI_FILE_MODE_READ, 0);
-    if (EFI_ERROR(status)) {
-        uefi_call_wrapper(root->Close, 1, root);
-        return NULL;
-    }
-
-    UINTN info_size = sizeof(EFI_FILE_INFO) + 256;
+    UINTN isz = sizeof(EFI_FILE_INFO) + 256;
     EFI_FILE_INFO* info;
-    uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, info_size, (void**)&info);
-    status = uefi_call_wrapper(file->GetInfo, 4, file, &GenericFileInfo, &info_size, info);
-    if (EFI_ERROR(status)) {
-        uefi_call_wrapper(ST->BootServices->FreePool, 1, info);
-        uefi_call_wrapper(file->Close, 1, file);
-        uefi_call_wrapper(root->Close, 1, root);
-        return NULL;
-    }
+    uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, isz, (void**)&info);
+    uefi_call_wrapper(f->GetInfo, 4, f, &GenericFileInfo, &isz, info);
 
-    *out_size = info->FileSize;
-    void* buffer;
-    uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, *out_size, &buffer);
-    status = uefi_call_wrapper(file->Read, 3, file, out_size, buffer);
+    *sz = info->FileSize;
+    void* b;
+    uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, *sz, &b);
+    uefi_call_wrapper(f->Read, 3, f, sz, b);
 
     uefi_call_wrapper(ST->BootServices->FreePool, 1, info);
-    uefi_call_wrapper(file->Close, 1, file);
-    uefi_call_wrapper(root->Close, 1, root);
-
-    return EFI_ERROR(status) ? NULL : buffer;
-}
-
-static void early_serial_init() {
-    uint16 port = 0x3F8;
-    outb(port + 1, 0x00);
-    outb(port + 3, 0x80);
-    outb(port + 0, 0x01);
-    outb(port + 1, 0x00);
-    outb(port + 3, 0x03);
-    outb(port + 2, 0xC7);
-    outb(port + 4, 0x0B);
-}
-
-static void early_serial_print(const char* str) {
-    uint16 port = 0x3F8;
-    while (*str) {
-        while (!(inb(port + 5) & 0x20));
-        outb(port, *str++);
-    }
+    uefi_call_wrapper(f->Close, 1, f);
+    return b;
 }
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
 
-    early_serial_init();
-    early_serial_print("\n--- UEFI Bootloader Starting ---\n");
-    Print(L"Kernel Bootloader Started\n");
+    void* heap = NULL;
+    uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, KERNEL_HEAP_SIZE, &heap);
+    if (heap) memory_set_heap(heap, KERNEL_HEAP_SIZE);
 
-    // 1. Prepare heap
-    void* heap_ptr = NULL;
-    uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, KERNEL_HEAP_SIZE, &heap_ptr);
-    if (heap_ptr) {
-        memory_set_heap(heap_ptr, KERNEL_HEAP_SIZE);
-    }
-
-    // 2. Setup Graphics (GOP)
-    EFI_GUID gop_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+    boot_params_t p = {0};
+    EFI_GUID g_g = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
-    boot_params_t params = {0};
-
-    EFI_STATUS status = uefi_call_wrapper(ST->BootServices->LocateProtocol, 3, &gop_guid, NULL, (void**)&gop);
-    if (!EFI_ERROR(status)) {
-        params.framebuffer = (uint32*)gop->Mode->FrameBufferBase;
-        params.width = gop->Mode->Info->HorizontalResolution;
-        params.height = gop->Mode->Info->VerticalResolution;
-        params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
-        early_serial_print("GOP Initialized\n");
-    } else {
-        early_serial_print("GOP Initialization FAILED\n");
+    if (!EFI_ERROR(uefi_call_wrapper(ST->BootServices->LocateProtocol, 3, &g_g, NULL, (void**)&gop))) {
+        p.framebuffer = (uint32*)gop->Mode->FrameBufferBase;
+        p.width = gop->Mode->Info->HorizontalResolution;
+        p.height = gop->Mode->Info->VerticalResolution;
+        p.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
     }
 
-    // 3. Load the initial RAM disk content
-    UINTN shell_size = 0;
-    void* shell_data = efi_load_file(ImageHandle, L"shell.bin", &shell_size);
-    if (shell_data) {
-        disk_register_file("shell.bin", shell_data, shell_size);
-        early_serial_print("Shell loaded into RAM disk\n");
-    } else {
-        early_serial_print("FAILED to load shell.bin\n");
-    }
+    UINTN sh_sz = 0;
+    void* sh_data = load_file(ImageHandle, L"shell.bin", &sh_sz);
+    if (sh_data) disk_register_file("shell.bin", sh_data, sh_sz);
 
-    // 4. Setup Generic Kernel Event System
-    event_init();
-    register_event_handler(dispatch_init);
-    register_event_handler(handle_exit);
+    stup(&p);
+    main();
 
-    // 5. Handover to Kernel
-    early_serial_print("Jumping to kernel_main...\n");
-    kernel_main(&params);
-
-    while(1) {
-        __asm__ volatile("hlt");
-    }
-
+    while(1) { __asm__ volatile("hlt"); }
     return EFI_SUCCESS;
 }

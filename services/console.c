@@ -6,6 +6,8 @@
 #include "../kernel/kernel.h"
 
 #define SERIAL_PORT 0x3F8
+#define PS2_DATA_PORT 0x60
+#define PS2_STATUS_PORT 0x64
 
 typedef struct {
     uint32 x;
@@ -16,8 +18,15 @@ typedef struct {
 
 static console_state_t* state = NULL;
 
+static const char scancode_table[] = {
+    0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
+    '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
+    0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,
+    '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*',
+    0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
 void console_init() {
-    // 1. Serial Port Initialization
     outb(SERIAL_PORT + 1, 0x00);
     outb(SERIAL_PORT + 3, 0x80);
     outb(SERIAL_PORT + 0, 0x01); // 115200
@@ -26,15 +35,12 @@ void console_init() {
     outb(SERIAL_PORT + 2, 0xC7);
     outb(SERIAL_PORT + 4, 0x0B);
 
-    // 2. Graphics State Initialization
     state = (console_state_t*)memory_alloc(sizeof(console_state_t));
     if (state) {
         state->x = 0;
         state->y = 0;
-        state->color = 0xFFFFFFFF; // White
+        state->color = 0xFFFFFFFF;
         state->params = get_boot_params();
-
-        // Clear screen if params are valid
         if (state->params && state->params->framebuffer) {
             for (uint32 i = 0; i < state->params->height * state->params->pixels_per_scanline; i++) {
                 state->params->framebuffer[i] = 0;
@@ -55,52 +61,41 @@ static void draw_char(char c, uint32 x, uint32 y, uint32 color) {
     for (int i = 0; i < 16; i++) {
         uint8 line = glyph[i];
         for (int j = 0; j < 8; j++) {
-            if (line & (0x80 >> j)) {
-                draw_pixel(x + j, y + i, color);
-            }
+            if (line & (0x80 >> j)) draw_pixel(x + j, y + i, color);
         }
     }
 }
 
 static void scroll() {
     if (!state || !state->params || !state->params->framebuffer) return;
-    uint32 line_height = 16;
+    uint32 lh = 16;
     uint32* fb = state->params->framebuffer;
     uint32 stride = state->params->pixels_per_scanline;
-    uint32 width = state->params->width;
-    uint32 height = state->params->height;
-
-    // Move everything up by 16 lines
-    for (uint32 y = 0; y < height - line_height; y++) {
-        for (uint32 x = 0; x < width; x++) {
-            fb[y * stride + x] = fb[(y + line_height) * stride + x];
+    for (uint32 y = 0; y < state->params->height - lh; y++) {
+        for (uint32 x = 0; x < state->params->width; x++) {
+            fb[y * stride + x] = fb[(y + lh) * stride + x];
         }
     }
-
-    // Clear the bottom 16 lines
-    for (uint32 y = height - line_height; y < height; y++) {
-        for (uint32 x = 0; x < width; x++) {
-            fb[y * stride + x] = 0;
-        }
+    for (uint32 y = state->params->height - lh; y < state->params->height; y++) {
+        for (uint32 x = 0; x < state->params->width; x++) fb[y * stride + x] = 0;
     }
-    state->y -= line_height;
+    state->y -= lh;
 }
 
 void console_print(const char* str) {
     while (*str) {
         char c = *str++;
-
-        // Serial mirror
         if (c == '\n') {
             while (!(inb(SERIAL_PORT + 5) & 0x20));
             outb(SERIAL_PORT, '\r');
+            while (!(inb(SERIAL_PORT + 5) & 0x20));
+            outb(SERIAL_PORT, '\n');
+        } else {
+            while (!(inb(SERIAL_PORT + 5) & 0x20));
+            outb(SERIAL_PORT, c);
         }
-        while (!(inb(SERIAL_PORT + 5) & 0x20));
-        outb(SERIAL_PORT, c);
 
-        // Graphical output
         if (!state || !state->params || !state->params->framebuffer) continue;
-
         if (c == '\n') {
             state->x = 0;
             state->y += 16;
@@ -109,51 +104,56 @@ void console_print(const char* str) {
         } else if (c == '\b') {
             if (state->x >= 8) {
                 state->x -= 8;
-                // Clear the character cell
-                for (int i = 0; i < 16; i++) {
-                    for (int j = 0; j < 8; j++) {
-                        draw_pixel(state->x + j, state->y + i, 0);
-                    }
-                }
+                for (int i = 0; i < 16; i++)
+                    for (int j = 0; j < 8; j++) draw_pixel(state->x + j, state->y + i, 0);
             }
         } else {
             draw_char(c, state->x, state->y, state->color);
             state->x += 8;
         }
-
-        if (state->x + 8 > state->params->width) {
-            state->x = 0;
-            state->y += 16;
-        }
-
-        if (state->y + 16 > state->params->height) {
-            scroll();
-        }
+        if (state->x + 8 > state->params->width) { state->x = 0; state->y += 16; }
+        if (state->y + 16 > state->params->height) scroll();
     }
 }
 
 char console_read_key() {
-    if (inb(SERIAL_PORT + 5) & 1) {
-        return (char)inb(SERIAL_PORT);
+    if (inb(SERIAL_PORT + 5) & 1) return (char)inb(SERIAL_PORT);
+    if (inb(PS2_STATUS_PORT) & 1) {
+        uint8 s = inb(PS2_DATA_PORT);
+        if (s < 0x80) return scancode_table[s];
     }
     return 0;
 }
 
 void console_wait_for_key() {
-    while (!(inb(SERIAL_PORT + 5) & 1)) {
+    while (1) {
+        if (inb(SERIAL_PORT + 5) & 1) return;
+        if (inb(PS2_STATUS_PORT) & 1) return;
         __asm__ volatile("pause");
     }
 }
 
-// Public API
-void print(const char* str) {
-    console_print(str);
+void console_input(const char* prompt, char* buffer, size_t size) {
+    if (prompt) console_print(prompt);
+    size_t i = 0;
+    while (i < size - 1) {
+        char c = 0;
+        while (!(c = console_read_key())) __asm__ volatile("pause");
+        if (c == '\r' || c == '\n') {
+            console_print("\n");
+            break;
+        } else if (c == '\b' || c == 127) {
+            if (i > 0) { i--; console_print("\b"); }
+        } else if (c >= 32 && c <= 126) {
+            buffer[i++] = c;
+            char s[2] = {c, 0};
+            console_print(s);
+        }
+    }
+    buffer[i] = 0;
 }
 
-void wait_for_key() {
-    console_wait_for_key();
-}
-
-char read_key() {
-    return console_read_key();
-}
+void print(const char* str) { console_print(str); }
+void wait_for_key() { console_wait_for_key(); }
+char read_key() { return console_read_key(); }
+void input(const char* prompt, char* buffer, size_t size) { console_input(prompt, buffer, size); }

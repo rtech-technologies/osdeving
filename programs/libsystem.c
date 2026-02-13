@@ -38,6 +38,10 @@ char read_key() {
     return 0;
 }
 
+void input(const char* prompt, char* buffer, size_t size) {
+    if (global_table) global_table->input(prompt, buffer, size);
+}
+
 void exit() {
     if (global_table) global_table->exit();
 }

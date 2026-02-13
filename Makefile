@@ -17,7 +17,7 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
-QEMU_DISPLAY = -nographic
+QEMU_USB = -device qemu-xhci -device usb-kbd
 
 .PHONY: all clean run setup compile make
 
@@ -43,7 +43,6 @@ $(KERNEL_EFI): kernel.so
 kernel.so: $(KERNEL_OBJS)
 	ld $(LDFLAGS) $(KERNEL_OBJS) -o $@ -lefi -lgnuefi
 
-# Shell compilation
 shell.bin: programs/shell.c programs/stub.c programs/libsystem.c boot/linker.ld
 	cc $(CFLAGS) -Iinclude -c programs/shell.c -o programs/shell.o
 	cc $(CFLAGS) -Iinclude -c programs/stub.c -o programs/stub.o
@@ -60,11 +59,13 @@ boot.img: $(KERNEL_EFI) shell.bin
 	mcopy -i boot.img shell.bin ::/shell.bin
 
 run: all
-	qemu-system-x86_64 $(QEMU_DISPLAY) \
+	qemu-system-x86_64 \
 		-bios $(OVMF_FD) \
 		-drive format=raw,file=boot.img \
 		-m 512M \
-		-net none
+		-net none \
+		$(QEMU_USB) \
+		-serial stdio
 
 clean:
 	rm -f kernel.so $(KERNEL_EFI) kernel/*.o services/*.o programs/*.o shell.elf shell.bin

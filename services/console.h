@@ -7,5 +7,6 @@ void console_init();
 void console_print(const char* str);
 void console_wait_for_key();
 char console_read_key();
+void console_input(const char* prompt, char* buffer, size_t size);
 
 #endif

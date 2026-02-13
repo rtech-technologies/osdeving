@@ -11,9 +11,10 @@ INTN fread(const char* path, void* buffer, UINTN max_size);
 INTN fwrite(const char* path, const void* buffer);
 void wait_for_key();
 char read_key();
+void input(const char* prompt, char* buffer, size_t size);
 void exit();
 
-// Syscall Table Structure for Kernel-to-Program interface
+// Syscall Table Structure
 typedef struct {
     void (*print)(const char*);
     void* (*alloc)(size_t);
@@ -22,6 +23,7 @@ typedef struct {
     INTN (*fwrite)(const char*, const void*);
     void (*wait_for_key)();
     char (*read_key)();
+    void (*input)(const char*, char*, size_t);
     void (*exit)();
 } syscall_table_t;
 
