@@ -38,14 +38,14 @@ static void handle_exit(event_t event) {
 typedef int (*program_main_t)(EFI_SYSTEM_TABLE* st);
 
 void kernel_main() {
-    print("Kernel started\n");
-
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
     register_service(fs_init);
 
     trigger(EVENT_INIT);
+
+    print("Kernel started\n");
 
     void* shell_buffer = alloc(65536);
 
@@ -69,8 +69,6 @@ void kernel_main() {
             trigger(EVENT_MAIN);
         }
 
-        // If we reached here without shell running (or after return),
-        // we should probably process EVENT_MAIN to avoid busy loop if shell fails.
         if (running) {
             trigger(EVENT_MAIN);
         }
@@ -80,6 +78,7 @@ void kernel_main() {
     trigger(EVENT_EXIT);
 }
 
+// efi_main is called by crt0.o which handles the MS ABI to SysV ABI conversion.
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* st) {
     InitializeLib(image, st);
 
