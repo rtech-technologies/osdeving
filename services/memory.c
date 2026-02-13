@@ -1,40 +1,38 @@
-#include <efi.h>
-#include <efilib.h>
 #include "memory.h"
 #include "../include/system.h"
 
-#define HEAP_SIZE (4 * 1024 * 1024) // 4MB heap
+static uint8* heap_base = NULL;
+static UINTN  heap_size = 0;
+static UINTN  heap_offset = 0;
 
-static uint8_t* heap_base = NULL;
-static size_t heap_offset = 0;
+void memory_set_heap(void* base, size_t size) {
+    heap_base = (uint8*)base;
+    heap_size = (UINTN)size;
+    heap_offset = 0;
+}
 
 void memory_init() {
-    if (heap_base != NULL) return; // Already initialized
-
-    EFI_STATUS status = ST->BootServices->AllocatePool(EfiLoaderData, HEAP_SIZE, (void**)&heap_base);
-    if (EFI_ERROR(status)) {
-        heap_base = NULL;
-        return;
-    }
+    // If heap hasn't been set by platform, we are in trouble.
+    // For now we assume the bootloader calls memory_set_heap first.
     heap_offset = 0;
 }
 
 void* memory_alloc(size_t size) {
-    if (heap_base == NULL || heap_offset + size > HEAP_SIZE) {
+    if (heap_base == NULL || heap_offset + size > heap_size) {
         return NULL;
     }
     void* ptr = heap_base + heap_offset;
     heap_offset += size;
-    // Align to 16 bytes for general safety
+    // Align to 16 bytes
     heap_offset = (heap_offset + 15) & ~15;
     return ptr;
 }
 
 void memory_free(void* ptr) {
-    // Bump allocator doesn't support free
+    // Bump allocator does not support free
 }
 
-// Global API implementations
+// Global API
 void* alloc(size_t size) {
     return memory_alloc(size);
 }

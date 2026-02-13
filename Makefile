@@ -6,11 +6,9 @@ EFILIB          = /usr/lib
 EFI_CRT_OBJS    = $(EFILIB)/crt0-efi-$(ARCH).o
 EFI_LDS         = $(EFILIB)/elf_$(ARCH)_efi.lds
 
+# Removed -DGNU_EFI_USE_MS_ABI to stick with gnu-efi default behavior
 CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
 		  -DEFI_FUNCTION_WRAPPER -fno-builtin -ffreestanding
-ifeq ($(ARCH),x86_64)
-  CFLAGS += -DGNU_EFI_USE_MS_ABI
-endif
 
 LDFLAGS         = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
 		  -Bsymbolic -L $(EFILIB) -L $(LIB) $(EFI_CRT_OBJS)
@@ -19,7 +17,6 @@ KERNEL_SRCS = kernel/main.c services/console.c services/memory.c services/event.
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 KERNEL_EFI = BOOTX64.EFI
-# Update this path if your system has it elsewhere (e.g. /usr/share/OVMF/OVMF_CODE.fd)
 OVMF_FD = /usr/share/ovmf/OVMF.fd
 QEMU_DISPLAY = -nographic
 
@@ -47,7 +44,7 @@ kernel.so: $(KERNEL_OBJS)
 shell.bin: programs/shell.c programs/stub.c services/console.c services/memory.c services/event.c
 	cc $(CFLAGS) -Iinclude -c programs/shell.c -o programs/shell.o
 	cc $(CFLAGS) -Iinclude -c programs/stub.c -o programs/stub.o
-	# stub.o must be first to ensure _start is at the beginning of the binary
+	# Note: we are linking service objects into the shell for direct calls
 	ld -nostdlib -T programs/linker.ld --entry=_start programs/stub.o programs/shell.o services/console.o services/memory.o services/event.o -o shell.elf
 	objcopy -O binary shell.elf shell.bin
 
