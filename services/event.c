@@ -1,5 +1,6 @@
 #include "event.h"
 #include "../include/types.h"
+#include "../include/system.h"
 
 #define MAX_HANDLERS 64
 
@@ -20,4 +21,8 @@ void trigger(event_t event) {
     for (int i = 0; i < handler_count; i++) {
         handlers[i](event);
     }
+}
+
+void exit() {
+    trigger(EVENT_EXIT);
 }

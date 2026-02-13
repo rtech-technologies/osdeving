@@ -47,26 +47,36 @@ void kernel_main() {
 
     trigger(EVENT_INIT);
 
-    print("Loading /shell.bin...\n");
     void* shell_buffer = alloc(65536);
-    int size = fread("/shell.bin", shell_buffer);
-    if (size > 0) {
-        print("Running shell...\n");
-        program_main_t shell_main = (program_main_t)shell_buffer;
-        shell_main(ST);
-    } else {
-        print("Failed to load shell\n");
-    }
 
     while (running) {
-        trigger(EVENT_MAIN);
+        if (shell_buffer) {
+            print("Loading /shell.bin...\n");
+            int size = fread("/shell.bin", shell_buffer);
+            if (size > 0) {
+                print("Running shell...\n");
+                program_main_t shell_main = (program_main_t)shell_buffer;
+                shell_main(ST);
+                if (running) {
+                    print("Program returned\n");
+                }
+            } else {
+                print("Failed to load shell\n");
+                trigger(EVENT_MAIN);
+            }
+        } else {
+            print("Memory allocation for shell failed\n");
+            trigger(EVENT_MAIN);
+        }
+
+        // If we reached here without shell running (or after return),
+        // we should probably process EVENT_MAIN to avoid busy loop if shell fails.
+        if (running) {
+            trigger(EVENT_MAIN);
+        }
     }
 
     trigger(EVENT_CLEANUP);
-    trigger(EVENT_EXIT);
-}
-
-void exit() {
     trigger(EVENT_EXIT);
 }
 
