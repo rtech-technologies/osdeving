@@ -22,8 +22,8 @@ void console_print(const char* str) {
                 ST->ConOut->OutputString(ST->ConOut, buffer);
                 i = 0;
             }
-            buffer[i++] = '\r';
-            buffer[i++] = '\n';
+            buffer[i++] = L'\r';
+            buffer[i++] = L'\n';
             str++;
         } else {
             if (i > 254) {
@@ -31,7 +31,7 @@ void console_print(const char* str) {
                 ST->ConOut->OutputString(ST->ConOut, buffer);
                 i = 0;
             }
-            buffer[i++] = (CHAR16)*str++;
+            buffer[i++] = (CHAR16)(unsigned char)*str++;
         }
     }
     buffer[i] = 0;

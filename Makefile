@@ -46,6 +46,7 @@ kernel.so: $(KERNEL_OBJS)
 shell.bin: programs/shell.c programs/stub.c services/console.c services/memory.c services/event.c
 	cc $(CFLAGS) -Iinclude -c programs/shell.c -o programs/shell.o
 	cc $(CFLAGS) -Iinclude -c programs/stub.c -o programs/stub.o
+	# stub.o must be first to ensure _start is at the beginning of the binary
 	ld -nostdlib -T programs/linker.ld --entry=_start programs/stub.o programs/shell.o services/console.o services/memory.o services/event.o -o shell.elf
 	objcopy -O binary shell.elf shell.bin
 
