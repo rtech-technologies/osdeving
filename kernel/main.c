@@ -8,12 +8,13 @@
 #include "../services/fs.h"
 #include "../include/system.h"
 
-// --- Kernel Core (Generic) ---
+// --- Kernel Core (Independent of UEFI) ---
 
 #define MAX_SERVICES 32
 static service_init_t services[MAX_SERVICES];
 static UINTN service_count = 0;
 static int running = 1;
+static boot_params_t* kernel_params = NULL;
 
 void register_service(service_init_t init_func) {
     if (service_count < MAX_SERVICES) {
@@ -35,12 +36,20 @@ static void handle_exit(event_t event) {
     }
 }
 
-typedef int (*program_main_t)();
+void kernel_exit() {
+    running = 0;
+}
+
+typedef int (*program_main_t)(syscall_table_t*);
 
 #define SHELL_BUFFER_SIZE 65536
 #define KERNEL_HEAP_SIZE (4 * 1024 * 1024)
 
-void kernel_main() {
+static syscall_table_t global_syscall_table;
+
+void kernel_main(boot_params_t* params) {
+    kernel_params = params;
+
     // 1. Service Registration
     register_service(console_init);
     register_service(memory_init);
@@ -50,27 +59,55 @@ void kernel_main() {
     // 2. Initialization Ritual
     trigger(EVENT_INIT);
 
-    print("Kernel reached main loop\n");
+    // 3. Setup Syscall Table for Programs
+    global_syscall_table.print = print;
+    global_syscall_table.alloc = alloc;
+    global_syscall_table.free = free;
+    global_syscall_table.fread = fread;
+    global_syscall_table.fwrite = fwrite;
+    global_syscall_table.wait_for_key = wait_for_key;
+    global_syscall_table.read_key = read_key;
+    global_syscall_table.exit = kernel_exit;
+
+    // 4. Early Diagnostics
+    print("Kernel reached main loop (Graphics Mode)\n");
+
+    if (memory_self_test() != 0) {
+        print("CRITICAL: Memory self-test failed!\n");
+        while(1);
+    }
 
     void* shell_buffer = alloc(SHELL_BUFFER_SIZE);
 
-    // 3. Main Event Loop
+    // 5. Main Event Loop
     while (running) {
         if (shell_buffer) {
-            INTN size = fread("/shell.bin", shell_buffer, SHELL_BUFFER_SIZE);
-            if (size > 0) {
+            static int shell_loaded = 0;
+            if (!shell_loaded) {
+                INTN size = fread("/shell.bin", shell_buffer, SHELL_BUFFER_SIZE);
+                if (size > 0) {
+                    shell_loaded = 1;
+                } else {
+                    print("Failed to load shell from disk\n");
+                }
+            }
+
+            if (shell_loaded) {
                 program_main_t shell_main = (program_main_t)shell_buffer;
-                shell_main();
+                shell_main(&global_syscall_table);
                 if (running) {
-                    print("Program returned. Reloading...\n");
+                    print("Program returned. Press any key to reload shell...\n");
+                    wait_for_key();
+                    shell_loaded = 0;
                 }
             } else {
-                print("Failed to load shell from disk\n");
                 trigger(EVENT_MAIN);
+                for (volatile int i = 0; i < 10000000; i++);
             }
         } else {
             print("Memory allocation for shell failed\n");
             trigger(EVENT_MAIN);
+            for (volatile int i = 0; i < 10000000; i++);
         }
 
         if (running) {
@@ -78,11 +115,15 @@ void kernel_main() {
         }
     }
 
-    // 4. Cleanup Ritual
+    // 6. Cleanup Ritual
     trigger(EVENT_CLEANUP);
     trigger(EVENT_EXIT);
 
     print("Kernel shutdown complete.\n");
+}
+
+boot_params_t* get_boot_params() {
+    return kernel_params;
 }
 
 // --- Bootloader (UEFI Specific) ---
@@ -133,34 +174,45 @@ static void* efi_load_file(EFI_HANDLE image, const CHAR16* path, UINTN* out_size
     return EFI_ERROR(status) ? NULL : buffer;
 }
 
-// Entry point called by gnu-efi crt0.o.
-// Uses standard calling convention as handled by the crt0 assembly.
+// Removed EFIAPI because gnu-efi crt0 calls efi_main using System V ABI (rdi, rsi)
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
 
-    // 1. Prepare hardware resources for the Kernel
+    // 1. Prepare heap
     void* heap_ptr = NULL;
     uefi_call_wrapper(ST->BootServices->AllocatePool, 3, EfiLoaderData, KERNEL_HEAP_SIZE, &heap_ptr);
     if (heap_ptr) {
         memory_set_heap(heap_ptr, KERNEL_HEAP_SIZE);
     }
 
-    // 2. Load the initial RAM disk content
+    // 2. Setup Graphics (GOP)
+    EFI_GUID gop_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+    boot_params_t params = {0};
+
+    EFI_STATUS status = uefi_call_wrapper(ST->BootServices->LocateProtocol, 3, &gop_guid, NULL, (void**)&gop);
+    if (!EFI_ERROR(status)) {
+        params.framebuffer = (uint32*)gop->Mode->FrameBufferBase;
+        params.width = gop->Mode->Info->HorizontalResolution;
+        params.height = gop->Mode->Info->VerticalResolution;
+        params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
+    }
+
+    // 3. Load the initial RAM disk content
     UINTN shell_size = 0;
     void* shell_data = efi_load_file(ImageHandle, L"shell.bin", &shell_size);
     if (shell_data) {
         disk_register_file("shell.bin", shell_data, shell_size);
     }
 
-    // 3. Setup Generic Kernel Event System
+    // 4. Setup Generic Kernel Event System
     event_init();
     register_event_handler(dispatch_init);
     register_event_handler(handle_exit);
 
-    // 4. Handover to Kernel
-    kernel_main();
+    // 5. Handover to Kernel
+    kernel_main(&params);
 
-    // prevent return to firmware
     while(1) {
         __asm__ volatile("hlt");
     }

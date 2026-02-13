@@ -1,29 +1,26 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#include <stdint.h>
-#include <stddef.h>
+#include <efi.h>
 
-// Standard UEFI-compatible types
-typedef uint64_t UINTN;
-typedef int64_t  INTN;
+typedef unsigned char      uint8;
+typedef unsigned short     uint16;
+typedef unsigned int       uint32;
+typedef UINT64             uint64;
 
-// Fixed-width types for hardware interaction
-typedef uint8_t  uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
+typedef signed char        int8;
+typedef signed short       int16;
+typedef signed int         int32;
+typedef INT64              int64;
 
-typedef int8_t   int8;
-typedef int16_t  int16;
-typedef int32_t  int32;
-typedef int64_t  int64;
+typedef UINTN              size_t;
+typedef INTN               ssize_t;
 
-typedef intptr_t intptr;
-typedef uintptr_t uintptr;
-
-#ifndef NULL
-#define NULL ((void*)0)
-#endif
+typedef struct {
+    uint32* framebuffer;
+    uint32  width;
+    uint32  height;
+    uint32  pixels_per_scanline;
+} boot_params_t;
 
 #endif

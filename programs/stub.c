@@ -1,5 +1,9 @@
-extern int program_main();
+#include "../include/system.h"
 
-int _start() {
-    return program_main();
+extern int program_main();
+extern void libsystem_init(syscall_table_t* table);
+
+void _start(syscall_table_t* table) {
+    libsystem_init(table);
+    program_main();
 }

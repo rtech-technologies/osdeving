@@ -13,7 +13,7 @@ int strcmp(const char* s1, const char* s2) {
 }
 
 int program_main() {
-    print("Shell started! (Non-UEFI Service mode)\n");
+    print("Shell started! (Non-UEFI Hardware mode)\n");
     char buffer[128];
     UINTN pos = 0;
 

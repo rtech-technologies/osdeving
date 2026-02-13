@@ -7,6 +7,9 @@
 static event_handler_t handlers[MAX_HANDLERS];
 static UINTN handler_count = 0;
 
+// Shared trigger for programs to call back into kernel
+void (*kernel_trigger)(event_t) = NULL;
+
 void event_init() {
     handler_count = 0;
 }
@@ -18,6 +21,11 @@ void register_event_handler(event_handler_t handler) {
 }
 
 void trigger(event_t event) {
+    if (kernel_trigger) {
+        kernel_trigger(event);
+        return;
+    }
+
     for (UINTN i = 0; i < handler_count; i++) {
         handlers[i](event);
     }
