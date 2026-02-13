@@ -30,10 +30,9 @@ compile: all
 setup:
 	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools
 	mkdir -p boot kernel services include programs
-	@if [ ! -f programs/linker.ld ]; then \
-		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > programs/linker.ld; \
+	@if [ ! -f boot/linker.ld ]; then \
+		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > boot/linker.ld; \
 	fi
-	cp programs/linker.ld boot/linker.ld
 
 $(KERNEL_EFI): kernel.so
 	objcopy -j .text -j .sdata -j .data -j .dynamic \
@@ -44,11 +43,11 @@ kernel.so: $(KERNEL_OBJS)
 	ld $(LDFLAGS) $(KERNEL_OBJS) -o $@ -lefi -lgnuefi
 
 # Shell compilation
-shell.bin: programs/shell.c programs/stub.c programs/libsystem.c
+shell.bin: programs/shell.c programs/stub.c programs/libsystem.c boot/linker.ld
 	cc $(CFLAGS) -Iinclude -c programs/shell.c -o programs/shell.o
 	cc $(CFLAGS) -Iinclude -c programs/stub.c -o programs/stub.o
 	cc $(CFLAGS) -Iinclude -c programs/libsystem.c -o programs/libsystem.o
-	ld -nostdlib -T programs/linker.ld --entry=_start programs/stub.o programs/shell.o programs/libsystem.o -o shell.elf
+	ld -nostdlib -T boot/linker.ld --entry=_start programs/stub.o programs/shell.o programs/libsystem.o -o shell.elf
 	objcopy -O binary shell.elf shell.bin
 
 boot.img: $(KERNEL_EFI) shell.bin
