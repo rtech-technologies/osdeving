@@ -18,18 +18,19 @@ LDFLAGS         = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
 KERNEL_SRCS = kernel/main.c services/console.c services/memory.c services/event.c services/disk.c services/fs.c
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
-BOOT_DIR = boot
 KERNEL_EFI = BOOTX64.EFI
+# Update this path if your system has it elsewhere (e.g. /usr/share/OVMF/OVMF_CODE.fd)
 OVMF_FD = /usr/share/ovmf/OVMF.fd
+QEMU_DISPLAY = -nographic
 
 .PHONY: all clean run setup
 
-all: $(KERNEL_EFI) shell.bin
+all: $(KERNEL_EFI) shell.bin boot.img
 
 setup:
-	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf
+	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools
 	mkdir -p boot build kernel services include programs
-	if [ ! -f programs/linker.ld ]; then \
+	@if [ ! -f programs/linker.ld ]; then \
 		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > programs/linker.ld; \
 	fi
 	cp programs/linker.ld boot/linker.ld
@@ -50,16 +51,22 @@ shell.bin: programs/shell.c programs/stub.c services/console.c services/memory.c
 	ld -nostdlib -T programs/linker.ld --entry=_start programs/stub.o programs/shell.o services/console.o services/memory.o services/event.o -o shell.elf
 	objcopy -O binary shell.elf shell.bin
 
+boot.img: $(KERNEL_EFI) shell.bin
+	dd if=/dev/zero of=boot.img bs=1M count=64
+	mkfs.fat -F 32 boot.img
+	mmd -i boot.img ::/EFI
+	mmd -i boot.img ::/EFI/BOOT
+	mcopy -i boot.img $(KERNEL_EFI) ::/EFI/BOOT/BOOTX64.EFI
+	mcopy -i boot.img shell.bin ::/shell.bin
+
 run: all
-	mkdir -p disk/EFI/BOOT
-	cp $(KERNEL_EFI) disk/EFI/BOOT/BOOTX64.EFI
-	cp shell.bin disk/shell.bin
-	qemu-system-x86_64 -nographic \
+	qemu-system-x86_64 $(QEMU_DISPLAY) \
 		-bios $(OVMF_FD) \
-		-drive format=raw,file=fat:rw:disk \
+		-drive format=raw,file=boot.img \
 		-m 512M \
 		-net none
 
 clean:
-	rm -f kernel.so $(KERNEL_EFI) $(KERNEL_OBJS) programs/shell.o programs/stub.o shell.elf shell.bin
+	rm -f kernel.so $(KERNEL_EFI) kernel/main.o services/*.o programs/*.o shell.elf shell.bin
+	rm -f boot.img
 	rm -rf disk

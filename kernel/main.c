@@ -45,16 +45,14 @@ void kernel_main() {
 
     trigger(EVENT_INIT);
 
-    print("Kernel started\n");
+    print("Kernel reached\n");
 
     void* shell_buffer = alloc(65536);
 
     while (running) {
         if (shell_buffer) {
-            print("Loading /shell.bin...\n");
             int size = fread("/shell.bin", shell_buffer);
             if (size > 0) {
-                print("Running shell...\n");
                 program_main_t shell_main = (program_main_t)shell_buffer;
                 shell_main(ST);
                 if (running) {
@@ -78,18 +76,16 @@ void kernel_main() {
     trigger(EVENT_EXIT);
 }
 
-// efi_main is called by crt0.o which handles the MS ABI to SysV ABI conversion.
-EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* st) {
-    InitializeLib(image, st);
+// Entry point called by crt0-efi-x86_64.o
+// No EFIAPI here as gnu-efi's crt0 handles the calling convention conversion
+EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
+    InitializeLib(ImageHandle, SystemTable);
 
-    disk_init_with_handle(image);
+    disk_init_with_handle(ImageHandle);
     event_init();
 
     register_event_handler(dispatch_init);
     register_event_handler(handle_exit);
-
-    console_init();
-    memory_init();
 
     kernel_main();
 
