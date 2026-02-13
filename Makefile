@@ -21,8 +21,14 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 BOOT_DIR = boot
 KERNEL_EFI = $(BOOT_DIR)/bootx64.efi
+OVMF_FD = /usr/share/ovmf/OVMF.fd
+
+.PHONY: all clean run setup
 
 all: $(KERNEL_EFI) shell.bin
+
+setup:
+	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf
 
 $(KERNEL_EFI): kernel.so
 	mkdir -p $(BOOT_DIR)
@@ -41,5 +47,12 @@ shell.bin: programs/shell.c programs/stub.c services/console.c services/memory.c
 	ld -nostdlib -T programs/linker.ld --entry=_start programs/stub.o programs/shell.o services/console.o services/memory.o services/event.o -o shell.elf
 	objcopy -O binary shell.elf shell.bin
 
+run: all
+	mkdir -p disk/EFI/BOOT
+	cp $(KERNEL_EFI) disk/EFI/BOOT/BOOTX64.EFI
+	cp shell.bin disk/shell.bin
+	qemu-system-x86_64 -nographic -bios $(OVMF_FD) -drive file=fat:rw:disk,format=raw -net none
+
 clean:
 	rm -f kernel.so $(KERNEL_EFI) $(KERNEL_OBJS) programs/shell.o programs/stub.o shell.elf shell.bin
+	rm -rf disk
