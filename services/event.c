@@ -5,7 +5,7 @@
 #define MAX_HANDLERS 64
 
 static event_handler_t handlers[MAX_HANDLERS];
-static int handler_count = 0;
+static UINTN handler_count = 0;
 
 void event_init() {
     handler_count = 0;
@@ -18,7 +18,7 @@ void register_event_handler(event_handler_t handler) {
 }
 
 void trigger(event_t event) {
-    for (int i = 0; i < handler_count; i++) {
+    for (UINTN i = 0; i < handler_count; i++) {
         handlers[i](event);
     }
 }

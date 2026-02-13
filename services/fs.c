@@ -8,16 +8,16 @@ void fs_init() {
     // Registry initialization placeholder
 }
 
-int fs_read(const char* path, void* buffer) {
+INTN fs_read(const char* path, void* buffer, UINTN max_size) {
     EFI_FILE_PROTOCOL* root = disk_get_root();
     if (!root) return -1;
 
     CHAR16 wpath[256];
-    int i = 0;
+    UINTN i = 0;
     const char* p = path;
     if (p[0] == '/') p++;
 
-    while (*p && i < 255) wpath[i++] = *p++;
+    while (*p && i < 255) wpath[i++] = (CHAR16)(unsigned char)*p++;
     wpath[i] = 0;
 
     EFI_FILE_PROTOCOL* file;
@@ -40,22 +40,26 @@ int fs_read(const char* path, void* buffer) {
     }
 
     UINTN read_size = info->FileSize;
+    if (read_size > max_size) {
+        read_size = max_size;
+    }
+
     ST->BootServices->FreePool(info);
 
     status = file->Read(file, &read_size, buffer);
 
     file->Close(file);
-    return EFI_ERROR(status) ? -1 : (int)read_size;
+    return EFI_ERROR(status) ? -1 : (INTN)read_size;
 }
 
-int fs_write(const char* path, const void* buffer) {
+INTN fs_write(const char* path, const void* buffer) {
     return -1;
 }
 
-int fread(const char* path, void* buffer) {
-    return fs_read(path, buffer);
+INTN fread(const char* path, void* buffer, UINTN max_size) {
+    return fs_read(path, buffer, max_size);
 }
 
-int fwrite(const char* path, const void* buffer) {
+INTN fwrite(const char* path, const void* buffer) {
     return fs_write(path, buffer);
 }

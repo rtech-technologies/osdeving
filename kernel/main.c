@@ -11,7 +11,7 @@
 // Service registry
 #define MAX_SERVICES 32
 static service_init_t services[MAX_SERVICES];
-static int service_count = 0;
+static UINTN service_count = 0;
 
 static int running = 1;
 
@@ -23,7 +23,7 @@ void register_service(service_init_t init_func) {
 
 static void dispatch_init(event_t event) {
     if (event == EVENT_INIT) {
-        for (int i = 0; i < service_count; i++) {
+        for (UINTN i = 0; i < service_count; i++) {
             services[i]();
         }
     }
@@ -37,21 +37,26 @@ static void handle_exit(event_t event) {
 
 typedef int (*program_main_t)(EFI_SYSTEM_TABLE* st);
 
+#define SHELL_BUFFER_SIZE 65536
+
 void kernel_main() {
+    // Service Registration
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
     register_service(fs_init);
 
+    // Initial trigger
     trigger(EVENT_INIT);
 
-    print("Kernel reached\n");
+    print("Kernel reached main loop\n");
 
-    void* shell_buffer = alloc(65536);
+    void* shell_buffer = alloc(SHELL_BUFFER_SIZE);
 
+    // Main Event Loop
     while (running) {
         if (shell_buffer) {
-            int size = fread("/shell.bin", shell_buffer);
+            INTN size = fread("/shell.bin", shell_buffer, SHELL_BUFFER_SIZE);
             if (size > 0) {
                 program_main_t shell_main = (program_main_t)shell_buffer;
                 shell_main(ST);
@@ -72,12 +77,12 @@ void kernel_main() {
         }
     }
 
+    // Cleanup and Exit
     trigger(EVENT_CLEANUP);
     trigger(EVENT_EXIT);
 }
 
-// Entry point called by crt0-efi-x86_64.o
-// No EFIAPI here as gnu-efi's crt0 handles the calling convention conversion
+// efi_main called by gnu-efi crt0.o (standard SysV ABI on Linux)
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
 
@@ -88,6 +93,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     register_event_handler(handle_exit);
 
     kernel_main();
+
+    // Prevent return to firmware
+    while(1);
 
     return EFI_SUCCESS;
 }

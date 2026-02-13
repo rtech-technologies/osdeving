@@ -15,7 +15,7 @@ int strcmp(const char* s1, const char* s2) {
 int program_main() {
     print("Shell started!\n");
     char buffer[128];
-    int pos = 0;
+    UINTN pos = 0;
 
     while (1) {
         print("> ");
