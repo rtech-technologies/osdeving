@@ -7,6 +7,7 @@
 #include "../services/disk.h"
 #include "../services/fs.h"
 #include "../include/system.h"
+#include "../include/io.h"
 
 // --- Kernel Core (Independent of UEFI) ---
 
@@ -174,9 +175,31 @@ static void* efi_load_file(EFI_HANDLE image, const CHAR16* path, UINTN* out_size
     return EFI_ERROR(status) ? NULL : buffer;
 }
 
-// Removed EFIAPI because gnu-efi crt0 calls efi_main using System V ABI (rdi, rsi)
+static void early_serial_init() {
+    uint16 port = 0x3F8;
+    outb(port + 1, 0x00);
+    outb(port + 3, 0x80);
+    outb(port + 0, 0x01);
+    outb(port + 1, 0x00);
+    outb(port + 3, 0x03);
+    outb(port + 2, 0xC7);
+    outb(port + 4, 0x0B);
+}
+
+static void early_serial_print(const char* str) {
+    uint16 port = 0x3F8;
+    while (*str) {
+        while (!(inb(port + 5) & 0x20));
+        outb(port, *str++);
+    }
+}
+
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
+
+    early_serial_init();
+    early_serial_print("\n--- UEFI Bootloader Starting ---\n");
+    Print(L"Kernel Bootloader Started\n");
 
     // 1. Prepare heap
     void* heap_ptr = NULL;
@@ -196,6 +219,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         params.width = gop->Mode->Info->HorizontalResolution;
         params.height = gop->Mode->Info->VerticalResolution;
         params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
+        early_serial_print("GOP Initialized\n");
+    } else {
+        early_serial_print("GOP Initialization FAILED\n");
     }
 
     // 3. Load the initial RAM disk content
@@ -203,6 +229,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     void* shell_data = efi_load_file(ImageHandle, L"shell.bin", &shell_size);
     if (shell_data) {
         disk_register_file("shell.bin", shell_data, shell_size);
+        early_serial_print("Shell loaded into RAM disk\n");
+    } else {
+        early_serial_print("FAILED to load shell.bin\n");
     }
 
     // 4. Setup Generic Kernel Event System
@@ -211,6 +240,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     register_event_handler(handle_exit);
 
     // 5. Handover to Kernel
+    early_serial_print("Jumping to kernel_main...\n");
     kernel_main(&params);
 
     while(1) {

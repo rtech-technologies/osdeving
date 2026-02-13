@@ -37,6 +37,7 @@ setup:
 $(KERNEL_EFI): kernel.so
 	objcopy -j .text -j .sdata -j .data -j .dynamic \
 		-j .dynsym  -j .rel -j .rela -j .reloc \
+		-j .rodata -j .rodata* \
 		--target=efi-app-$(ARCH) $^ $@
 
 kernel.so: $(KERNEL_OBJS)
