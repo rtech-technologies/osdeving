@@ -136,21 +136,27 @@ void console_wait_for_key() {
 void console_input(const char* prompt, char* buffer, size_t size) {
     if (prompt) console_print(prompt);
     size_t i = 0;
-    while (i < size - 1) {
-        char c = 0;
-        while (!(c = console_read_key())) __asm__ volatile("pause");
+    while (1) {
+        char c = console_read_key();
+        if (!c) {
+            __asm__ volatile("pause");
+            continue;
+        }
+
         if (c == '\r' || c == '\n') {
+            buffer[i] = '\0';
             console_print("\n");
-            break;
-        } else if (c == '\b' || c == 127) {
-            if (i > 0) { i--; console_print("\b"); }
-        } else if (c >= 32 && c <= 126) {
+            return;
+        } else if ((c == '\b' || c == 127) && i > 0) {
+            i--;
+            buffer[i] = '\0';
+            console_print("\b \b");
+        } else if (i < size - 1 && c >= 32 && c <= 126) {
             buffer[i++] = c;
             char s[2] = {c, 0};
             console_print(s);
         }
     }
-    buffer[i] = 0;
 }
 
 void print(const char* str) { console_print(str); }

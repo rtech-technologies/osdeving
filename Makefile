@@ -17,11 +17,12 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
+BOOT_IMG = boot.img
 QEMU_USB = -device qemu-xhci -device usb-kbd
 
-.PHONY: all clean run setup compile make
+.PHONY: all clean run run-serial setup compile make vga_test
 
-all: $(KERNEL_EFI) shell.bin boot.img
+all: $(KERNEL_EFI) shell.bin $(BOOT_IMG)
 
 make: all
 
@@ -43,6 +44,7 @@ $(KERNEL_EFI): kernel.so
 kernel.so: $(KERNEL_OBJS)
 	ld $(LDFLAGS) $(KERNEL_OBJS) -o $@ -lefi -lgnuefi
 
+# Shell compilation
 shell.bin: programs/shell.c programs/stub.c programs/libsystem.c boot/linker.ld
 	cc $(CFLAGS) -Iinclude -c programs/shell.c -o programs/shell.o
 	cc $(CFLAGS) -Iinclude -c programs/stub.c -o programs/stub.o
@@ -50,24 +52,37 @@ shell.bin: programs/shell.c programs/stub.c programs/libsystem.c boot/linker.ld
 	ld -nostdlib -T boot/linker.ld --entry=_start programs/stub.o programs/shell.o programs/libsystem.o -o shell.elf
 	objcopy -O binary shell.elf shell.bin
 
-boot.img: $(KERNEL_EFI) shell.bin
-	dd if=/dev/zero of=boot.img bs=1M count=64
-	mkfs.fat -F 32 boot.img
-	mmd -i boot.img ::/EFI
-	mmd -i boot.img ::/EFI/BOOT
-	mcopy -i boot.img $(KERNEL_EFI) ::/EFI/BOOT/BOOTX64.EFI
-	mcopy -i boot.img shell.bin ::/shell.bin
+$(BOOT_IMG): $(KERNEL_EFI) shell.bin
+	dd if=/dev/zero of=$(BOOT_IMG) bs=1M count=64
+	mkfs.fat -F 32 $(BOOT_IMG)
+	mmd -i $(BOOT_IMG) ::/EFI
+	mmd -i $(BOOT_IMG) ::/EFI/BOOT
+	mcopy -i $(BOOT_IMG) $(KERNEL_EFI) ::/EFI/BOOT/BOOTX64.EFI
+	mcopy -i $(BOOT_IMG) shell.bin ::/shell.bin
 
 run: all
 	qemu-system-x86_64 \
 		-bios $(OVMF_FD) \
-		-drive format=raw,file=boot.img \
+		-drive format=raw,file=$(BOOT_IMG) \
 		-m 512M \
 		-net none \
 		$(QEMU_USB) \
-		-serial stdio
+		-serial stdio \
+		-display sdl
+
+run-serial: all
+	qemu-system-x86_64 \
+		-nographic \
+		-bios $(OVMF_FD) \
+		-drive format=raw,file=$(BOOT_IMG) \
+		-m 512M \
+		-net none \
+		$(QEMU_USB)
+
+vga_test:
+	@echo "VGA testing placeholder"
 
 clean:
 	rm -f kernel.so $(KERNEL_EFI) kernel/*.o services/*.o programs/*.o shell.elf shell.bin
-	rm -f boot.img
+	rm -f $(BOOT_IMG)
 	rm -rf disk
