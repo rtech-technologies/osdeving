@@ -6,7 +6,6 @@ EFILIB          = /usr/lib
 EFI_CRT_OBJS    = $(EFILIB)/crt0-efi-$(ARCH).o
 EFI_LDS         = $(EFILIB)/elf_$(ARCH)_efi.lds
 
-# Use standard gnu-efi CFLAGS (no global MS_ABI)
 CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
 		  -DEFI_FUNCTION_WRAPPER -fno-builtin -ffreestanding
 
@@ -20,13 +19,17 @@ KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
 QEMU_DISPLAY = -nographic
 
-.PHONY: all clean run setup
+.PHONY: all clean run setup compile make
 
 all: $(KERNEL_EFI) shell.bin boot.img
 
+make: all
+
+compile: all
+
 setup:
 	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools
-	mkdir -p boot build kernel services include programs
+	mkdir -p boot kernel services include programs
 	@if [ ! -f programs/linker.ld ]; then \
 		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > programs/linker.ld; \
 	fi
@@ -64,6 +67,6 @@ run: all
 		-net none
 
 clean:
-	rm -f kernel.so $(KERNEL_EFI) kernel/main.o services/*.o programs/*.o shell.elf shell.bin
+	rm -f kernel.so $(KERNEL_EFI) kernel/*.o services/*.o programs/*.o shell.elf shell.bin
 	rm -f boot.img
 	rm -rf disk
