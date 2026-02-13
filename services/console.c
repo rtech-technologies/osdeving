@@ -4,7 +4,6 @@
 #include "../include/system.h"
 
 void console_init() {
-    // Basic initialization if needed. Clear screen is a good choice for v0.
     if (ST && ST->ConOut) {
         ST->ConOut->ClearScreen(ST->ConOut);
     }
@@ -13,15 +12,30 @@ void console_init() {
 void console_print(const char* str) {
     if (!ST || !ST->ConOut) return;
 
-    CHAR16 buffer[2];
-    buffer[1] = 0;
+    CHAR16 buffer[256];
+    int i = 0;
 
     while (*str) {
         if (*str == '\n') {
-            buffer[0] = '\r';
-            ST->ConOut->OutputString(ST->ConOut, buffer);
+            if (i > 253) { // Need space for \r\n and null
+                buffer[i] = 0;
+                ST->ConOut->OutputString(ST->ConOut, buffer);
+                i = 0;
+            }
+            buffer[i++] = '\r';
+            buffer[i++] = '\n';
+            str++;
+        } else {
+            if (i > 254) {
+                buffer[i] = 0;
+                ST->ConOut->OutputString(ST->ConOut, buffer);
+                i = 0;
+            }
+            buffer[i++] = (CHAR16)*str++;
         }
-        buffer[0] = *str++;
+    }
+    buffer[i] = 0;
+    if (i > 0) {
         ST->ConOut->OutputString(ST->ConOut, buffer);
     }
 }
