@@ -1,7 +1,16 @@
 #ifndef SYS_H
 #define SYS_H
 
-#include "system.h"
 #include "types.h"
+#include "system.h"
+
+// Kernel Library Headers
+#include "../kernel/libs/console/console.h"
+#include "../kernel/libs/memory/memory.h"
+#include "../kernel/libs/disk/disk.h"
+#include "../kernel/libs/fs/fs.h"
+#include "../kernel/libs/event/event.h"
+#include "../kernel/libs/init/init.h"
+#include "../kernel/unice64/kernel.h"
 
 #endif

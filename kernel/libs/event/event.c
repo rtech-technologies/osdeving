@@ -1,6 +1,6 @@
 #include "event.h"
 #include "../../../include/types.h"
-#include "../../../include/system.h"
+#include "system.h"
 
 #define MAX_HANDLERS 64
 

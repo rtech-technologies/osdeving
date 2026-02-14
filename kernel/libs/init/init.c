@@ -1,10 +1,4 @@
-#include "init.h"
-#include "../console/console.h"
-#include "../memory/memory.h"
-#include "../disk/disk.h"
-#include "../fs/fs.h"
-#include "../event/event.h"
-#include "../../../include/system.h"
+#include "sys"
 
 void init(boot_params_t* params) {
     kparams = params;

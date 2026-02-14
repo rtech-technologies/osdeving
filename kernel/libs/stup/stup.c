@@ -1,5 +1,4 @@
-#include "../../unice64/kernel.h"
-#include "../init/init.h"
+#include "sys"
 
 #define SHELL_BUFFER_SIZE 65536
 

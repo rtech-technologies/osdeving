@@ -7,7 +7,16 @@ EFI_CRT_OBJS    = $(EFILIB)/crt0-efi-$(ARCH).o
 EFI_LDS         = $(EFILIB)/elf_$(ARCH)_efi.lds
 
 CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
-		  -DEFI_FUNCTION_WRAPPER -fno-builtin -ffreestanding
+		  -DEFI_FUNCTION_WRAPPER -fno-builtin -ffreestanding \
+		  -Iinclude \
+		  -Ikernel/libs/console \
+		  -Ikernel/libs/memory \
+		  -Ikernel/libs/disk \
+		  -Ikernel/libs/fs \
+		  -Ikernel/libs/event \
+		  -Ikernel/libs/init \
+		  -Ikernel/libs/stup \
+		  -Ikernel/unice64
 
 LDFLAGS         = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
 		  -Bsymbolic -L $(EFILIB) -L $(LIB) $(EFI_CRT_OBJS)

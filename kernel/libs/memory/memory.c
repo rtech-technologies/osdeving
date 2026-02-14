@@ -1,5 +1,5 @@
 #include "memory.h"
-#include "../../../include/system.h"
+#include "system.h"
 
 static uint8* heap_base = NULL;
 static UINTN  heap_size = 0;

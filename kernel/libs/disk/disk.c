@@ -1,5 +1,5 @@
 #include "disk.h"
-#include "../../../include/system.h"
+#include "system.h"
 
 #define MAX_RAMDISK_FILES 8
 

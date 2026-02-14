@@ -1,7 +1,7 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
-#include "../../../include/types.h"
+#include "types.h"
 
 void memory_init();
 void* memory_alloc(UINTN size);

@@ -1,7 +1,7 @@
 #ifndef DISK_H
 #define DISK_H
 
-#include "../../../include/types.h"
+#include "types.h"
 
 void disk_init();
 

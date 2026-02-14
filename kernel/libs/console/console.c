@@ -1,6 +1,6 @@
 #include "console.h"
 #include "../memory/memory.h"
-#include "../../../include/system.h"
+#include "system.h"
 #include "../../unice64/io.h"
 #include "font.h"
 #include "../../unice64/kernel.h"

@@ -1,8 +1,7 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include "../../include/types.h"
-#include "../../include/system.h"
+#include "sys"
 
 typedef void (*service_init_t)();
 

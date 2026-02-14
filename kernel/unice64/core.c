@@ -1,5 +1,4 @@
-#include "kernel.h"
-#include "../libs/event/event.h"
+#include "../../include/sys"
 
 #define MAX_SERVICES 32
 static service_init_t services[MAX_SERVICES];
