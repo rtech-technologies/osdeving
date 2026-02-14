@@ -21,6 +21,7 @@ typedef struct {
     uint32  width;
     uint32  height;
     uint32  pixels_per_scanline;
+    EFI_SYSTEM_TABLE* st;
 } boot_params_t;
 
 #endif

@@ -18,6 +18,19 @@ typedef struct {
 
 static console_state_t* state = NULL;
 
+void console_ps2_init() {
+    // Enable keyboard port
+    outb(PS2_STATUS_PORT, 0xAE);
+    io_wait();
+
+    // Flush buffer
+    int timeout = 10000;
+    while (timeout-- > 0 && (inb(PS2_STATUS_PORT) & 1)) {
+        inb(PS2_DATA_PORT);
+        io_wait();
+    }
+}
+
 static const char scancode_table[] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
@@ -34,6 +47,8 @@ void console_init() {
     outb(SERIAL_PORT + 3, 0x03);
     outb(SERIAL_PORT + 2, 0xC7);
     outb(SERIAL_PORT + 4, 0x0B);
+
+    console_ps2_init();
 
     state = (console_state_t*)memory_alloc(sizeof(console_state_t));
     if (state) {
@@ -117,6 +132,8 @@ void console_print(const char* str) {
 }
 
 char console_read_key() {
+    char usb_key = (char)usb_get_key();
+    if (usb_key) return usb_key;
     if (inb(SERIAL_PORT + 5) & 1) return (char)inb(SERIAL_PORT);
     if (inb(PS2_STATUS_PORT) & 1) {
         uint8 s = inb(PS2_DATA_PORT);
@@ -127,6 +144,7 @@ char console_read_key() {
 
 void console_wait_for_key() {
     while (1) {
+        if (usb_has_key()) return;
         if (inb(SERIAL_PORT + 5) & 1) return;
         if (inb(PS2_STATUS_PORT) & 1) return;
         __asm__ volatile("pause");

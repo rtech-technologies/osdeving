@@ -38,6 +38,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     if (heap) memory_set_heap(heap, KERNEL_HEAP_SIZE);
 
     boot_params_t p = {0};
+    p.st = SystemTable;
     EFI_GUID g_g = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
     if (!EFI_ERROR(uefi_call_wrapper(ST->BootServices->LocateProtocol, 3, &g_g, NULL, (void**)&gop))) {

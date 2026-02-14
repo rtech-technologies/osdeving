@@ -5,6 +5,7 @@
 
 void usb_keyboard_init(void);
 int usb_get_key(void);
+int usb_has_key(void);
 
 // Internal/Placeholder functions from user spec
 void usb_init_controller(void);
