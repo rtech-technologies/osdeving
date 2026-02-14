@@ -1,5 +1,6 @@
 #include "usb_keyboard.h"
 #include "console.h"
+#include "keyboard_map.h"
 #include "../../unice64/io.h"
 #include "../../unice64/kernel.h"
 
@@ -114,12 +115,11 @@ static void usb_poll_direct() {
     uint8 report[8];
     UINTN len = 8;
     UINT32 status = 0;
-    // Endpoint 0x81 is standard for HID keyboards
+    // Use 0ms timeout for non-blocking poll
     EFI_STATUS s = uefi_call_wrapper(active_usb_keyboard->SyncInterruptTransfer, 6,
-                                    active_usb_keyboard, 0x81, report, &len, 1, &status);
+                                    active_usb_keyboard, 0x81, report, &len, 0, &status);
 
     if (s == EFI_SUCCESS && len == 8) {
-        // Simple change detection
         if (report[2] != last_hid_report[2] && report[2] != 0) {
             char c = translate_hid_to_keycode(report[2]);
             if (c) {
@@ -149,15 +149,8 @@ int usb_get_key(void) {
     }
     // Fallback to legacy PS/2
     if (inb(0x64) & 1) {
-        static const char scancodes[] = {
-            0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
-            '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
-            0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,
-            '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*',
-            0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-        };
         uint8 s = inb(0x60);
-        if (s < 0x80) return scancodes[s];
+        if (s < 0x80) return scancode_table[s];
     }
     return 0;
 }

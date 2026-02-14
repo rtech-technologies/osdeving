@@ -31,14 +31,6 @@ void console_ps2_init() {
     }
 }
 
-static const char scancode_table[] = {
-    0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
-    '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
-    0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,
-    '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*',
-    0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
 void console_init() {
     outb(SERIAL_PORT + 1, 0x00);
     outb(SERIAL_PORT + 3, 0x80);
@@ -132,13 +124,13 @@ void console_print(const char* str) {
 }
 
 char console_read_key() {
-    char usb_key = (char)usb_get_key();
-    if (usb_key) return usb_key;
+    // 1. Check Unified Keyboard Service (USB + PS/2)
+    char key = (char)usb_get_key();
+    if (key) return key;
+
+    // 2. Check Serial Input
     if (inb(SERIAL_PORT + 5) & 1) return (char)inb(SERIAL_PORT);
-    if (inb(PS2_STATUS_PORT) & 1) {
-        uint8 s = inb(PS2_DATA_PORT);
-        if (s < 0x80) return scancode_table[s];
-    }
+
     return 0;
 }
 
@@ -146,7 +138,6 @@ void console_wait_for_key() {
     while (1) {
         if (usb_has_key()) return;
         if (inb(SERIAL_PORT + 5) & 1) return;
-        if (inb(PS2_STATUS_PORT) & 1) return;
         __asm__ volatile("pause");
     }
 }
