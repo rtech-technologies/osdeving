@@ -11,6 +11,7 @@
 #include "../kernel/libs/fs/fs.h"
 #include "../kernel/libs/event/event.h"
 #include "../kernel/libs/init/init.h"
+#include "../kernel/libs/usb_keyboard/usb_keyboard.h"
 #include "../kernel/unice64/kernel.h"
 
 #endif
