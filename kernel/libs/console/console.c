@@ -1,9 +1,9 @@
 #include "console.h"
-#include "memory.h"
-#include "../include/system.h"
-#include "../include/io.h"
-#include "../include/font.h"
-#include "../kernel/kernel.h"
+#include "../memory/memory.h"
+#include "../../../include/system.h"
+#include "../../unice64/io.h"
+#include "font.h"
+#include "../../unice64/kernel.h"
 
 #define SERIAL_PORT 0x3F8
 #define PS2_DATA_PORT 0x60

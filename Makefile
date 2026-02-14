@@ -12,7 +12,17 @@ CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
 LDFLAGS         = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
 		  -Bsymbolic -L $(EFILIB) -L $(LIB) $(EFI_CRT_OBJS)
 
-KERNEL_SRCS = kernel/main.c services/console.c services/memory.c services/event.c services/disk.c services/fs.c services/font_data.c
+KERNEL_SRCS = kernel/unice64/main.c \
+              kernel/unice64/core.c \
+              kernel/libs/init/init.c \
+              kernel/libs/console/console.c \
+              kernel/libs/console/font_data.c \
+              kernel/libs/memory/memory.c \
+              kernel/libs/disk/disk.c \
+              kernel/libs/fs/fs.c \
+              kernel/libs/event/event.c \
+              kernel/libs/stup/stup.c
+
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 KERNEL_EFI = BOOTX64.EFI
@@ -30,7 +40,7 @@ compile: all
 
 setup:
 	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools
-	mkdir -p boot kernel services include programs
+	mkdir -p boot kernel/libs kernel/unice64 include programs
 	@if [ ! -f boot/linker.ld ]; then \
 		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > boot/linker.ld; \
 	fi
@@ -83,6 +93,15 @@ vga_test:
 	@echo "VGA testing placeholder"
 
 clean:
-	rm -f kernel.so $(KERNEL_EFI) kernel/*.o services/*.o programs/*.o shell.elf shell.bin
+	rm -f kernel.so $(KERNEL_EFI) \
+	      kernel/unice64/*.o \
+	      kernel/libs/console/*.o \
+	      kernel/libs/memory/*.o \
+	      kernel/libs/disk/*.o \
+	      kernel/libs/fs/*.o \
+	      kernel/libs/event/*.o \
+	      kernel/libs/init/*.o \
+	      kernel/libs/stup/*.o \
+	      programs/*.o shell.elf shell.bin
 	rm -f $(BOOT_IMG)
 	rm -rf disk

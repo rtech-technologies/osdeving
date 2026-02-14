@@ -1,4 +1,4 @@
-#include "../include/system.h"
+#include "../include/sys"
 
 static syscall_table_t* global_table = (void*)0;
 

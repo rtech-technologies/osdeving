@@ -1,7 +1,7 @@
 #ifndef IO_H
 #define IO_H
 
-#include "types.h"
+#include "../../include/types.h"
 
 static inline void outb(uint16 port, uint8 val) {
     __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));

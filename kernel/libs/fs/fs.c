@@ -1,6 +1,6 @@
 #include "fs.h"
 #include "disk.h"
-#include "../include/system.h"
+#include "../../../include/system.h"
 
 void fs_init() {
     // Disk is already initialized

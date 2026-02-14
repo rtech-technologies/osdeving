@@ -1,4 +1,4 @@
-#include "../include/system.h"
+#include "../include/sys"
 
 int strcmp(const char* s1, const char* s2) {
     while (*s1 && (*s1 == *s2)) { s1++; s2++; }
@@ -6,7 +6,7 @@ int strcmp(const char* s1, const char* s2) {
 }
 
 int program_main() {
-    print("Shell started! (Epic mode enabled)\n");
+    print("RTECH dos Shell v1.0 (OSx2)\n");
     char buffer[128];
 
     while (1) {
@@ -19,7 +19,7 @@ int program_main() {
         } else if (strcmp(buffer, "help") == 0) {
             print("Commands: help, exit\n");
         } else if (buffer[0]) {
-            print("Unknown command: "); print(buffer); print("\n");
+            print("Bad command or file name: "); print(buffer); print("\n");
         }
     }
     return 0;

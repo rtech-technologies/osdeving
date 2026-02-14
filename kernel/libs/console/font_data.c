@@ -1,4 +1,4 @@
-#include "../include/font.h"
+#include "font.h"
 
 // Recognizeable 8x16 font (Selected Glyphs)
 const uint8 font_8x16[95][16] = {
