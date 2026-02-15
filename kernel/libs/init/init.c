@@ -25,6 +25,7 @@ void init(boot_params_t* params) {
     ksyscalls.wait_for_key = wait_for_key;
     ksyscalls.read_key = read_key;
     ksyscalls.input = input;
+    ksyscalls.lsdev = usb_lsdev;
     ksyscalls.exit = kernel_exit;
 
     // 4. System Initialization Event

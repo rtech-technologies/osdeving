@@ -17,7 +17,9 @@ int program_main() {
             exit();
             return 0;
         } else if (strcmp(buffer, "help") == 0) {
-            print("Commands: help, exit\n");
+            print("Commands: lsdev, help, exit\n");
+        } else if (strcmp(buffer, "lsdev") == 0) {
+            lsdev();
         } else if (buffer[0]) {
             print("Bad command or file name: "); print(buffer); print("\n");
         }

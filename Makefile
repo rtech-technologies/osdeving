@@ -41,7 +41,9 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
 BOOT_IMG = boot.img
-QEMU_USB = -device qemu-xhci -device usb-kbd
+# QEMU Run Configuration
+QEMU_BASE_FLAGS = -m 512M -net none
+QEMU_DEVICES = -device qemu-xhci -device usb-kbd -device usb-mouse -device usb-tablet
 
 .PHONY: all clean run run-serial setup compile make vga_test
 
@@ -87,20 +89,16 @@ run: all
 	qemu-system-x86_64 \
 		-bios $(OVMF_FD) \
 		-drive format=raw,file=$(BOOT_IMG) \
-		-m 512M \
-		-net none \
-		$(QEMU_USB) \
-		-serial stdio \
-		-display sdl
+		$(QEMU_BASE_FLAGS) -serial stdio -display sdl \
+		$(QEMU_DEVICES)
 
 run-serial: all
 	qemu-system-x86_64 \
 		-nographic \
 		-bios $(OVMF_FD) \
 		-drive format=raw,file=$(BOOT_IMG) \
-		-m 512M \
-		-net none \
-		$(QEMU_USB)
+		$(QEMU_BASE_FLAGS) \
+		$(QEMU_DEVICES)
 
 vga_test:
 	@echo "VGA testing placeholder"

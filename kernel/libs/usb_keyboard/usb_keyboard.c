@@ -169,6 +169,22 @@ int usb_get_key(void) {
     return (int)input_map_pop_char();
 }
 
+void usb_lsdev(void) {
+    console_print("--- OSx2 Device Inventory ---\n");
+    usb_init_controller();
+    if (keyboard_count == 0) {
+        console_print("No active USB HID Keyboards found.\n");
+    } else {
+        console_print("Active USB HID Keyboards: ");
+        // Simple int to string
+        char buf[4];
+        buf[0] = '0' + keyboard_count;
+        buf[1] = '\n';
+        buf[2] = 0;
+        console_print(buf);
+    }
+}
+
 void usb_keyboard_init(void) {
     usb_init_controller();
     usb_enumerate_hid_keyboard();

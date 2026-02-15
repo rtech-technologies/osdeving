@@ -12,6 +12,7 @@ INTN fwrite(const char* path, const void* buffer);
 void wait_for_key();
 char read_key();
 void input(const char* prompt, char* buffer, size_t size);
+void lsdev();
 void exit();
 
 // Syscall Table Structure
@@ -24,6 +25,7 @@ typedef struct {
     void (*wait_for_key)();
     char (*read_key)();
     void (*input)(const char*, char*, size_t);
+    void (*lsdev)();
     void (*exit)();
 } syscall_table_t;
 
