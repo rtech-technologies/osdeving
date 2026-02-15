@@ -19,34 +19,92 @@ typedef struct {
 
 static console_state_t* state = NULL;
 
-void console_ps2_init() {
-    outb(PS2_STATUS_PORT, 0xAE);
-    io_wait();
-    int timeout = 10000;
-    while (timeout-- > 0 && (inb(PS2_STATUS_PORT) & 1)) {
-        inb(PS2_DATA_PORT);
-        io_wait();
-    }
+static void ps2_wait_write() {
+    while (inb(PS2_STATUS_PORT) & 0x02);
 }
 
-void console_detect_hardware() {
-    // 1. Detect Serial (Standard PC UART check)
-    // Write to scratch register and read back
+static void ps2_wait_read() {
+    while (!(inb(PS2_STATUS_PORT) & 0x01));
+}
+
+void console_ps2_setup() {
+    // Controller Initialization
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0xAD); // disable port 1
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0xA7); // disable port 2
+
+    // Flush output buffer
+    while (inb(PS2_STATUS_PORT) & 1) inb(PS2_DATA_PORT);
+
+    // Read config
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0x20);
+    ps2_wait_read();
+    uint8 config = inb(PS2_DATA_PORT);
+
+    // Modify config (clear bits 0, 1, 6)
+    config &= ~( (1 << 0) | (1 << 1) | (1 << 6) );
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0x60);
+    ps2_wait_write();
+    outb(PS2_DATA_PORT, config);
+
+    // Controller self-test
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0xAA);
+    ps2_wait_read();
+    if (inb(PS2_DATA_PORT) != 0x55) {
+        console_print("PS/2 Controller self-test FAILED\n");
+        return;
+    }
+
+    // Enable first PS/2 port
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0xAE);
+
+    // Test first port
+    ps2_wait_write();
+    outb(PS2_STATUS_PORT, 0xAB);
+    ps2_wait_read();
+    if (inb(PS2_DATA_PORT) != 0x00) {
+        console_print("PS/2 Port 1 test FAILED\n");
+        return;
+    }
+
+    // Keyboard Device Initialization
+    // Reset keyboard
+    ps2_wait_write();
+    outb(PS2_DATA_PORT, 0xFF);
+    ps2_wait_read();
+    if (inb(PS2_DATA_PORT) != 0xFA) { console_print("KBD Reset ACK failed\n"); }
+    ps2_wait_read();
+    if (inb(PS2_DATA_PORT) != 0xAA) { console_print("KBD Self-test failed\n"); }
+
+    // Set scancode set 1
+    ps2_wait_write();
+    outb(PS2_DATA_PORT, 0xF0);
+    ps2_wait_read(); inb(PS2_DATA_PORT); // ACK
+    ps2_wait_write();
+    outb(PS2_DATA_PORT, 0x01);
+    ps2_wait_read(); inb(PS2_DATA_PORT); // ACK
+
+    // Enable scanning
+    ps2_wait_write();
+    outb(PS2_DATA_PORT, 0xF4);
+    ps2_wait_read(); inb(PS2_DATA_PORT); // ACK
+
+    input_map_set_status(INPUT_SRC_PS2, INPUT_STATUS_CONNECTED);
+    console_print("PS/2 Keyboard Initialized.\n");
+}
+
+void console_detect_serial() {
     outb(SERIAL_PORT + 7, 0x55);
     if (inb(SERIAL_PORT + 7) == 0x55) {
         outb(SERIAL_PORT + 7, 0xAA);
         if (inb(SERIAL_PORT + 7) == 0xAA) {
             input_map_set_status(INPUT_SRC_SERIAL, INPUT_STATUS_CONNECTED);
         }
-    }
-
-    // 2. Detect PS/2 Keyboard
-    // Send Echo command (0xEE), if we get 0xEE back, it's there.
-    // Or just check if there's any life.
-    outb(0x60, 0xEE);
-    for(volatile int i=0; i<10000; i++); // Wait
-    if (inb(0x60) == 0xEE) {
-        input_map_set_status(INPUT_SRC_PS2, INPUT_STATUS_CONNECTED);
     }
 }
 
@@ -59,8 +117,8 @@ void console_init() {
     outb(SERIAL_PORT + 2, 0xC7);
     outb(SERIAL_PORT + 4, 0x0B);
 
-    console_ps2_init();
-    console_detect_hardware();
+    console_detect_serial();
+    console_ps2_setup();
 
     state = (console_state_t*)memory_alloc(sizeof(console_state_t));
     if (state) {
@@ -109,6 +167,17 @@ static void scroll() {
     state->y -= lh;
 }
 
+static void console_print_hex(uint8 n) {
+    const char* hex = "0123456789ABCDEF";
+    char buf[5];
+    buf[0] = '0';
+    buf[1] = 'x';
+    buf[2] = hex[(n >> 4) & 0xF];
+    buf[3] = hex[n & 0xF];
+    buf[4] = 0;
+    console_print(buf);
+}
+
 void console_print(const char* str) {
     while (*str) {
         char c = *str++;
@@ -147,23 +216,24 @@ void console_print(const char* str) {
 
 char console_read_key() {
     // 1. Unified Polling Order: USB > PS/2 > Serial
-    // (with conditional hardware probing if ONLINE)
 
     // A. Priority 1: Native USB HID
     usb_poll_all();
 
     // B. Priority 2: Legacy PS/2
-    if (input_map_get_status(INPUT_SRC_PS2) == INPUT_STATUS_CONNECTED) {
-        if (inb(PS2_STATUS_PORT) & 1) {
-            input_map_push(INPUT_SRC_PS2, inb(PS2_DATA_PORT), 0);
-        }
+    if (inb(PS2_STATUS_PORT) & 1) {
+        uint8 scancode = inb(PS2_DATA_PORT);
+        // Debug log to serial
+        console_print("PS/2 Scancode: ");
+        console_print_hex(scancode);
+        console_print("\n");
+
+        input_map_push(INPUT_SRC_PS2, scancode, 0);
     }
 
     // C. Priority 3: Serial Terminal
-    if (input_map_get_status(INPUT_SRC_SERIAL) == INPUT_STATUS_CONNECTED) {
-        if (inb(SERIAL_PORT + 5) & 1) {
-            input_map_push(INPUT_SRC_SERIAL, inb(SERIAL_PORT), 0);
-        }
+    if (inb(SERIAL_PORT + 5) & 1) {
+        input_map_push(INPUT_SRC_SERIAL, inb(SERIAL_PORT), 0);
     }
 
     return input_map_pop_char();
