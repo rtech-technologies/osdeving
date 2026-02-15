@@ -226,16 +226,8 @@ char console_read_key() {
     usb_poll_all();
 
     // B. Priority 2: Legacy PS/2
-    uint8 ps2_status = inb(PS2_STATUS_PORT);
-    if (ps2_status & 1) {
+    if (inb(PS2_STATUS_PORT) & 1) {
         uint8 scancode = inb(PS2_DATA_PORT);
-        // Debug log to serial with status
-        console_print("PS/2 Polling [Status: ");
-        console_print_hex(ps2_status);
-        console_print("] Scancode: ");
-        console_print_hex(scancode);
-        console_print("\n");
-
         input_map_push(INPUT_SRC_PS2, scancode, 0);
     }
 
