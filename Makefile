@@ -15,6 +15,7 @@ CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
 		  -Ikernel/libs/fs \
 		  -Ikernel/libs/event \
 		  -Ikernel/libs/init \
+		  -Ikernel/libs/input \
 		  -Ikernel/libs/usb_keyboard \
 		  -Ikernel/libs/stup \
 		  -Ikernel/unice64
@@ -31,6 +32,7 @@ KERNEL_SRCS = kernel/unice64/main.c \
               kernel/libs/disk/disk.c \
               kernel/libs/fs/fs.c \
               kernel/libs/event/event.c \
+              kernel/libs/input/input_map.c \
               kernel/libs/usb_keyboard/usb_keyboard.c \
               kernel/libs/stup/stup.c
 
@@ -112,6 +114,7 @@ clean:
 	      kernel/libs/fs/*.o \
 	      kernel/libs/event/*.o \
 	      kernel/libs/init/*.o \
+	      kernel/libs/input/*.o \
       kernel/libs/usb_keyboard/*.o \
 	      kernel/libs/stup/*.o \
 	      programs/*.o shell.elf shell.bin

@@ -1,10 +1,19 @@
 #include "usb_keyboard.h"
 #include "console.h"
-#include "keyboard_map.h"
+#include "input_map.h"
 #include "../../unice64/io.h"
 #include "../../unice64/kernel.h"
 
-// Minimum UEFI USB definitions for a "real" driver backend
+// --- Standard USB HID Definitions ---
+typedef struct {
+    uint8  Length;
+    uint8  DescriptorType;
+    uint8  EndpointAddress;
+    uint8  Attributes;
+    uint16 MaxPacketSize;
+    uint8  Interval;
+} USB_ENDPOINT_DESCRIPTOR;
+
 typedef struct {
     uint8  Length;
     uint8  DescriptorType;
@@ -24,6 +33,12 @@ typedef EFI_STATUS (EFIAPI *EFI_USB_IO_GET_INTERFACE_DESCRIPTOR)(
     OUT USB_INTERFACE_DESCRIPTOR     *InterfaceDescriptor
 );
 
+typedef EFI_STATUS (EFIAPI *EFI_USB_IO_GET_ENDPOINT_DESCRIPTOR)(
+    IN EFI_USB_IO_PROTOCOL           *This,
+    IN UINT8                         EndpointIndex,
+    OUT USB_ENDPOINT_DESCRIPTOR      *EndpointDescriptor
+);
+
 typedef EFI_STATUS (EFIAPI *EFI_USB_IO_SYNC_INTERRUPT_TRANSFER)(
     IN EFI_USB_IO_PROTOCOL           *This,
     IN UINT8                         DeviceEndpoint,
@@ -41,118 +56,117 @@ struct _EFI_USB_IO_PROTOCOL {
     void* GetDeviceDescriptor;
     void* GetConfigDescriptor;
     EFI_USB_IO_GET_INTERFACE_DESCRIPTOR UsbGetInterfaceDescriptor;
+    EFI_USB_IO_GET_ENDPOINT_DESCRIPTOR UsbGetEndpointDescriptor;
 };
 
-#define USB_KEY_BUFFER_SIZE 32
-static uint8 key_buffer[USB_KEY_BUFFER_SIZE];
-static int buffer_start = 0;
-static int buffer_end = 0;
+// --- Driver State ---
+#define MAX_KEYBOARDS 4
+static struct {
+    EFI_USB_IO_PROTOCOL* io;
+    uint8 endpoint;
+    uint8 last_report[8];
+} keyboards[MAX_KEYBOARDS];
 
-static EFI_USB_IO_PROTOCOL* active_usb_keyboard = NULL;
-static uint8 last_hid_report[8] = {0};
-
-uint8 translate_hid_to_keycode(uint8 hid_code) {
-    if (hid_code >= 0x04 && hid_code <= 0x1D) return 'a' + (hid_code - 0x04);
-    if (hid_code >= 0x1E && hid_code <= 0x27) {
-        if (hid_code == 0x27) return '0';
-        return '1' + (hid_code - 0x1E);
-    }
-    if (hid_code == 0x28) return '\n';
-    if (hid_code == 0x2C) return ' ';
-    if (hid_code == 0x2A) return '\b';
-    return 0;
-}
+static int keyboard_count = 0;
 
 void usb_init_controller(void) {
-    console_print("Scanning for USB Controllers via PCI...\n");
+    console_print("Probing PCI for USB Host Controllers...\n");
     for (int bus = 0; bus < 256; bus++) {
         for (int dev = 0; dev < 32; dev++) {
-            uint32 val = pci_read_config_32(bus, dev, 0, 0);
-            if ((val & 0xFFFF) == 0xFFFF) continue;
-            uint32 class_rev = pci_read_config_32(bus, dev, 0, 0x08);
-            if (((class_rev >> 24) & 0xFF) == 0x0C && ((class_rev >> 16) & 0xFF) == 0x03) {
-                uint8 prog_if = (class_rev >> 8) & 0xFF;
-                const char* type = (prog_if == 0x30) ? "XHCI" : (prog_if == 0x20) ? "EHCI" : "Legacy";
-                console_print("Detected USB Controller: ");
-                console_print(type);
-                console_print("\n");
+            uint32 v = pci_read_config_32(bus, dev, 0, 0);
+            if ((v & 0xFFFF) == 0xFFFF) continue;
+            uint32 c = pci_read_config_32(bus, dev, 0, 0x08);
+            if (((c >> 24) & 0xFF) == 0x0C && ((c >> 16) & 0xFF) == 0x03) {
+                uint8 pi = (c >> 8) & 0xFF;
+                console_print("USB Controller Found: ");
+                if (pi == 0x30) console_print("xHCI\n");
+                else if (pi == 0x20) console_print("EHCI\n");
+                else console_print("Legacy\n");
             }
         }
     }
 }
 
 void usb_enumerate_hid_keyboard(void) {
-    boot_params_t* params = get_boot_params();
-    if (!params || !params->st) return;
+    boot_params_t* p = get_boot_params();
+    if (!p || !p->st) return;
 
     EFI_GUID usb_io_g = { 0x2B2D2436, 0x9831, 0x442D, { 0x8D, 0x6D, 0xEF, 0x1A, 0x5D, 0x01, 0xD1, 0x89 } };
     UINTN count = 0;
     EFI_HANDLE* handles = NULL;
 
-    EFI_STATUS status = uefi_call_wrapper(params->st->BootServices->LocateHandleBuffer, 5,
-                                          ByProtocol, &usb_io_g, NULL, &count, &handles);
+    EFI_STATUS s = uefi_call_wrapper(p->st->BootServices->LocateHandleBuffer, 5, ByProtocol, &usb_io_g, NULL, &count, &handles);
+    if (s != EFI_SUCCESS) return;
 
-    if (status == EFI_SUCCESS && count > 0) {
-        for (UINTN i = 0; i < count; i++) {
-            EFI_USB_IO_PROTOCOL* usb_io = NULL;
-            status = uefi_call_wrapper(params->st->BootServices->HandleProtocol, 3, handles[i], &usb_io_g, (void**)&usb_io);
-            if (status == EFI_SUCCESS && usb_io) {
-                USB_INTERFACE_DESCRIPTOR if_desc;
-                status = uefi_call_wrapper(usb_io->UsbGetInterfaceDescriptor, 2, usb_io, &if_desc);
-                if (status == EFI_SUCCESS && if_desc.InterfaceClass == 3 && if_desc.InterfaceProtocol == 1) {
-                    console_print("Direct USB Keyboard link established.\n");
-                    active_usb_keyboard = usb_io;
-                    break;
+    keyboard_count = 0;
+    for (UINTN i = 0; i < count && keyboard_count < MAX_KEYBOARDS; i++) {
+        EFI_USB_IO_PROTOCOL* usb_io = NULL;
+        if (uefi_call_wrapper(p->st->BootServices->HandleProtocol, 3, handles[i], &usb_io_g, (void**)&usb_io) == EFI_SUCCESS) {
+            USB_INTERFACE_DESCRIPTOR ifd;
+            if (uefi_call_wrapper(usb_io->UsbGetInterfaceDescriptor, 2, usb_io, &ifd) == EFI_SUCCESS) {
+                // Class 3: HID, Protocol 1: Keyboard
+                if (ifd.InterfaceClass == 3 && ifd.InterfaceProtocol == 1) {
+                    // Find Interrupt-In Endpoint
+                    for (int e = 0; e < ifd.NumEndpoints; e++) {
+                        USB_ENDPOINT_DESCRIPTOR ed;
+                        if (uefi_call_wrapper(usb_io->UsbGetEndpointDescriptor, 3, usb_io, (uint8)e, &ed) == EFI_SUCCESS) {
+                            if ((ed.EndpointAddress & 0x80) && (ed.Attributes & 0x03) == 0x03) {
+                                keyboards[keyboard_count].io = usb_io;
+                                keyboards[keyboard_count].endpoint = ed.EndpointAddress;
+                                for(int k=0; k<8; k++) keyboards[keyboard_count].last_report[k] = 0;
+                                keyboard_count++;
+                                console_print("USB Keyboard Bound (Endpoint 0x");
+                                // Simple hex print placeholder
+                                char buf[4]; buf[0] = '0'; buf[1] = 'x'; buf[2] = '0' + (ed.EndpointAddress >> 4); buf[3] = 0;
+                                console_print(buf);
+                                console_print(")\n");
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
-        uefi_call_wrapper(params->st->BootServices->FreePool, 1, handles);
     }
+    uefi_call_wrapper(p->st->BootServices->FreePool, 1, handles);
 }
 
-static void usb_poll_direct() {
-    if (!active_usb_keyboard) return;
-    uint8 report[8];
-    UINTN len = 8;
-    UINT32 status = 0;
-    // Use 0ms timeout for non-blocking poll
-    EFI_STATUS s = uefi_call_wrapper(active_usb_keyboard->SyncInterruptTransfer, 6,
-                                    active_usb_keyboard, 0x81, report, &len, 0, &status);
+void usb_poll_all() {
+    for (int i = 0; i < keyboard_count; i++) {
+        uint8 report[8];
+        UINTN len = 8;
+        UINT32 status = 0;
+        EFI_STATUS s = uefi_call_wrapper(keyboards[i].io->SyncInterruptTransfer, 6,
+                                        keyboards[i].io, keyboards[i].endpoint, report, &len, 0, &status);
 
-    if (s == EFI_SUCCESS && len == 8) {
-        if (report[2] != last_hid_report[2] && report[2] != 0) {
-            char c = translate_hid_to_keycode(report[2]);
-            if (c) {
-                int next = (buffer_end + 1) % USB_KEY_BUFFER_SIZE;
-                if (next != buffer_start) {
-                    key_buffer[buffer_end] = (uint8)c;
-                    buffer_end = next;
+        if (s == EFI_SUCCESS && len == 8) {
+            // Process modifiers (report[0]) and up to 6 keys (report[2..7])
+            // For simplicity in a kernel loop, we handle the first new key found
+            for (int k = 2; k < 8; k++) {
+                if (report[k] != 0) {
+                    // Check if this key was in the last report
+                    int found = 0;
+                    for (int prev = 2; prev < 8; prev++) {
+                        if (report[k] == keyboards[i].last_report[prev]) { found = 1; break; }
+                    }
+                    if (!found) {
+                        input_map_push(INPUT_SRC_USB_HID, report[k], report[0]);
+                    }
                 }
             }
+            for (int k = 0; k < 8; k++) keyboards[i].last_report[k] = report[k];
         }
-        for (int i=0; i<8; i++) last_hid_report[i] = report[i];
     }
 }
 
 int usb_has_key(void) {
-    usb_poll_direct();
-    if (buffer_start != buffer_end) return 1;
-    return (inb(0x64) & 1);
+    usb_poll_all();
+    return input_map_has_char();
 }
 
 int usb_get_key(void) {
-    usb_poll_direct();
-    if (buffer_start != buffer_end) {
-        int key = key_buffer[buffer_start];
-        buffer_start = (buffer_start + 1) % USB_KEY_BUFFER_SIZE;
-        return key;
-    }
-    // Fallback to legacy PS/2
-    if (inb(0x64) & 1) {
-        uint8 s = inb(0x60);
-        if (s < 0x80) return scancode_table[s];
-    }
-    return 0;
+    usb_poll_all();
+    return (int)input_map_pop_char();
 }
 
 void usb_keyboard_init(void) {

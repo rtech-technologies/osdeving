@@ -1,6 +1,7 @@
 #include "console.h"
 #include "../memory/memory.h"
 #include "system.h"
+#include "input_map.h"
 #include "../../unice64/io.h"
 #include "font.h"
 #include "../../unice64/kernel.h"
@@ -19,11 +20,8 @@ typedef struct {
 static console_state_t* state = NULL;
 
 void console_ps2_init() {
-    // Enable keyboard port
     outb(PS2_STATUS_PORT, 0xAE);
     io_wait();
-
-    // Flush buffer
     int timeout = 10000;
     while (timeout-- > 0 && (inb(PS2_STATUS_PORT) & 1)) {
         inb(PS2_DATA_PORT);
@@ -34,7 +32,7 @@ void console_ps2_init() {
 void console_init() {
     outb(SERIAL_PORT + 1, 0x00);
     outb(SERIAL_PORT + 3, 0x80);
-    outb(SERIAL_PORT + 0, 0x01); // 115200
+    outb(SERIAL_PORT + 0, 0x01);
     outb(SERIAL_PORT + 1, 0x00);
     outb(SERIAL_PORT + 3, 0x03);
     outb(SERIAL_PORT + 2, 0xC7);
@@ -124,20 +122,32 @@ void console_print(const char* str) {
 }
 
 char console_read_key() {
-    // 1. Check Unified Keyboard Service (USB + PS/2)
-    char key = (char)usb_get_key();
-    if (key) return key;
+    // 1. Trigger all polls
+    usb_poll_all();
 
-    // 2. Check Serial Input
-    if (inb(SERIAL_PORT + 5) & 1) return (char)inb(SERIAL_PORT);
+    // 2. Poll Serial directly (simplest)
+    if (inb(SERIAL_PORT + 5) & 1) {
+        input_map_push(INPUT_SRC_SERIAL, inb(SERIAL_PORT), 0);
+    }
 
-    return 0;
+    // 3. Poll PS/2 directly
+    if (inb(PS2_STATUS_PORT) & 1) {
+        uint8 s = inb(PS2_DATA_PORT);
+        if (s < 0x80) input_map_push(INPUT_SRC_PS2, s, 0); // Modifiers handled via state if needed, here 0
+    }
+
+    // 4. Consume from unified map
+    return input_map_pop_char();
 }
 
 void console_wait_for_key() {
     while (1) {
-        if (usb_has_key()) return;
-        if (inb(SERIAL_PORT + 5) & 1) return;
+        char c = console_read_key();
+        if (c) {
+            // Push it back so read_key can get it
+            // Actually, we should just return if there is ANY char in the map
+            return;
+        }
         __asm__ volatile("pause");
     }
 }

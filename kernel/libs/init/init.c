@@ -4,6 +4,7 @@ void init(boot_params_t* params) {
     kparams = params;
 
     // 1. Registry Ritual
+    register_service(input_map_init);
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
