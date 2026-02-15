@@ -1,11 +1,18 @@
 #include "input_map.h"
 
-#define INPUT_BUFFER_SIZE 128
+// OSx2 Central Input Mapping Table
+// Tracks state of modifiers and provides unified translation for all sources.
+
+#define INPUT_BUFFER_SIZE 256
 static char input_buffer[INPUT_BUFFER_SIZE];
 static int head = 0;
 static int tail = 0;
 
-// PS/2 Map (Set 1)
+// Modifier states
+static uint8 ps2_modifiers = 0;
+static uint8 usb_modifiers = 0;
+
+// PS/2 Scancode Table (Set 1)
 static const char ps2_map[] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
@@ -22,8 +29,8 @@ static const char ps2_map_shift[] = {
     0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-// USB HID Map
-static const char usb_hid_map[256] = {
+// USB HID Keyboard Usage ID Table
+static const char hid_map[256] = {
     [0x04] = 'a', [0x05] = 'b', [0x06] = 'c', [0x07] = 'd', [0x08] = 'e',
     [0x09] = 'f', [0x0A] = 'g', [0x0B] = 'h', [0x0C] = 'i', [0x0D] = 'j',
     [0x0E] = 'k', [0x0F] = 'l', [0x10] = 'm', [0x11] = 'n', [0x12] = 'o',
@@ -37,7 +44,7 @@ static const char usb_hid_map[256] = {
     [0x35] = '`', [0x36] = ',', [0x37] = '.', [0x38] = '/'
 };
 
-static const char usb_hid_map_shift[256] = {
+static const char hid_map_shift[256] = {
     [0x04] = 'A', [0x05] = 'B', [0x06] = 'C', [0x07] = 'D', [0x08] = 'E',
     [0x09] = 'F', [0x0A] = 'G', [0x0B] = 'H', [0x0C] = 'I', [0x0D] = 'J',
     [0x0E] = 'K', [0x0F] = 'L', [0x10] = 'M', [0x11] = 'N', [0x12] = 'O',
@@ -54,30 +61,31 @@ static const char usb_hid_map_shift[256] = {
 void input_map_init() {
     head = 0;
     tail = 0;
+    ps2_modifiers = 0;
+    usb_modifiers = 0;
 }
 
 void input_map_push(input_source_t source, uint32 raw_code, uint8 modifiers) {
     char c = 0;
-    int is_shift = 0;
 
-    switch (source) {
-        case INPUT_SRC_PS2:
-            is_shift = (modifiers & 0x01);
-            if (raw_code < sizeof(ps2_map)) {
-                c = is_shift ? ps2_map_shift[raw_code] : ps2_map[raw_code];
-            }
-            break;
-        case INPUT_SRC_USB_HID:
-            is_shift = (modifiers & 0x02) || (modifiers & 0x20); // HID Left Shift (0x02) or Right Shift (0x20)
-            if (raw_code < 256) {
-                c = is_shift ? usb_hid_map_shift[raw_code] : usb_hid_map[raw_code];
-            }
-            break;
-        case INPUT_SRC_SERIAL:
-            c = (char)(raw_code & 0xFF);
-            break;
-        default:
-            break;
+    if (source == INPUT_SRC_SERIAL) {
+        c = (char)(raw_code & 0xFF);
+    }
+    else if (source == INPUT_SRC_PS2) {
+        // Handle Make/Break for Shift (0x2A, 0x36)
+        if (raw_code == 0x2A || raw_code == 0x36) ps2_modifiers |= 0x01;
+        else if (raw_code == 0xAA || raw_code == 0xB6) ps2_modifiers &= ~0x01;
+
+        if (raw_code < 0x80) { // Make code
+            c = (ps2_modifiers & 0x01) ? ps2_map_shift[raw_code] : ps2_map[raw_code];
+        }
+    }
+    else if (source == INPUT_SRC_USB_HID) {
+        // Modifiers: 0x02/0x20 are Shift
+        int shift = (modifiers & 0x22) ? 1 : 0;
+        if (raw_code < 256) {
+            c = shift ? hid_map_shift[raw_code] : hid_map[raw_code];
+        }
     }
 
     if (c) {

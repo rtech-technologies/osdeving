@@ -122,32 +122,27 @@ void console_print(const char* str) {
 }
 
 char console_read_key() {
-    // 1. Trigger all polls
+    // Poll Native Drivers
     usb_poll_all();
 
-    // 2. Poll Serial directly (simplest)
+    // Poll Serial
     if (inb(SERIAL_PORT + 5) & 1) {
         input_map_push(INPUT_SRC_SERIAL, inb(SERIAL_PORT), 0);
     }
 
-    // 3. Poll PS/2 directly
+    // Poll PS/2
     if (inb(PS2_STATUS_PORT) & 1) {
         uint8 s = inb(PS2_DATA_PORT);
-        if (s < 0x80) input_map_push(INPUT_SRC_PS2, s, 0); // Modifiers handled via state if needed, here 0
+        input_map_push(INPUT_SRC_PS2, s, 0);
     }
 
-    // 4. Consume from unified map
     return input_map_pop_char();
 }
 
 void console_wait_for_key() {
     while (1) {
-        char c = console_read_key();
-        if (c) {
-            // Push it back so read_key can get it
-            // Actually, we should just return if there is ANY char in the map
-            return;
-        }
+        if (input_map_has_char()) return;
+        console_read_key();
         __asm__ volatile("pause");
     }
 }

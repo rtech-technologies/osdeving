@@ -27,6 +27,22 @@ static inline void io_wait(void) {
     outb(0x80, 0);
 }
 
+static inline uint32 mmio_read32(uint64 addr) {
+    return *(volatile uint32*)addr;
+}
+
+static inline void mmio_write32(uint64 addr, uint32 val) {
+    *(volatile uint32*)addr = val;
+}
+
+static inline uint64 mmio_read64(uint64 addr) {
+    return *(volatile uint64*)addr;
+}
+
+static inline void mmio_write64(uint64 addr, uint64 val) {
+    *(volatile uint64*)addr = val;
+}
+
 static inline uint32 pci_read_config_32(uint8 bus, uint8 slot, uint8 func, uint8 offset) {
     uint32 address;
     uint32 lbus  = (uint32)bus;

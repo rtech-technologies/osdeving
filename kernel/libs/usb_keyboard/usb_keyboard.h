@@ -6,6 +6,7 @@
 void usb_keyboard_init(void);
 void usb_poll_all(void);
 void usb_lsdev(void);
+void usb_keyboard_process_report(const uint8* data, uint32 len);
 int usb_get_key(void);
 int usb_has_key(void);
 

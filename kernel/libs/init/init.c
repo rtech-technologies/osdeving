@@ -9,6 +9,7 @@ void init(boot_params_t* params) {
     register_service(memory_init);
     register_service(disk_init);
     register_service(fs_init);
+    register_service(xhci_init);
     register_service(usb_keyboard_init);
 
     // 2. Event Setup
