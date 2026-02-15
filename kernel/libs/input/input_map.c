@@ -12,6 +12,9 @@ static int tail = 0;
 static uint8 ps2_modifiers = 0;
 static uint8 usb_modifiers = 0;
 
+// Device Status Table
+static input_device_status_t device_statuses[INPUT_SRC_MAX];
+
 // PS/2 Scancode Table (Set 1)
 static const char ps2_map[] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
@@ -63,6 +66,16 @@ void input_map_init() {
     tail = 0;
     ps2_modifiers = 0;
     usb_modifiers = 0;
+    for (int i = 0; i < INPUT_SRC_MAX; i++) device_statuses[i] = INPUT_STATUS_DISCONNECTED;
+}
+
+void input_map_set_status(input_source_t source, input_device_status_t status) {
+    if (source < INPUT_SRC_MAX) device_statuses[source] = status;
+}
+
+input_device_status_t input_map_get_status(input_source_t source) {
+    if (source < INPUT_SRC_MAX) return device_statuses[source];
+    return INPUT_STATUS_DISCONNECTED;
 }
 
 void input_map_push(input_source_t source, uint32 raw_code, uint8 modifiers) {
@@ -72,16 +85,14 @@ void input_map_push(input_source_t source, uint32 raw_code, uint8 modifiers) {
         c = (char)(raw_code & 0xFF);
     }
     else if (source == INPUT_SRC_PS2) {
-        // Handle Make/Break for Shift (0x2A, 0x36)
         if (raw_code == 0x2A || raw_code == 0x36) ps2_modifiers |= 0x01;
         else if (raw_code == 0xAA || raw_code == 0xB6) ps2_modifiers &= ~0x01;
 
-        if (raw_code < 0x80) { // Make code
+        if (raw_code < 0x80) {
             c = (ps2_modifiers & 0x01) ? ps2_map_shift[raw_code] : ps2_map[raw_code];
         }
     }
     else if (source == INPUT_SRC_USB_HID) {
-        // Modifiers: 0x02/0x20 are Shift
         int shift = (modifiers & 0x22) ? 1 : 0;
         if (raw_code < 256) {
             c = shift ? hid_map_shift[raw_code] : hid_map[raw_code];

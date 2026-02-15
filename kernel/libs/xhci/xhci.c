@@ -2,6 +2,7 @@
 #include "console.h"
 #include "memory.h"
 #include "usb_keyboard.h"
+#include "input_map.h"
 #include "../../unice64/io.h"
 
 #define PCI_CLASS_SERIAL 0x0C
@@ -144,6 +145,7 @@ void xhci_process_events() {
         if (type == 32) { // Transfer Event
             // Check if it's a HID report
             // For v0, we assume anything on an interrupt endpoint is a report
+            input_map_set_status(INPUT_SRC_USB_HID, INPUT_STATUS_CONNECTED);
             usb_keyboard_process_report((uint8*)trb->parameter, 8);
         } else if (type == 33) { // Command Completion Event
             uint32 slot = trb->control >> 24;

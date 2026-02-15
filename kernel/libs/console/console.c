@@ -29,6 +29,27 @@ void console_ps2_init() {
     }
 }
 
+void console_detect_hardware() {
+    // 1. Detect Serial (Standard PC UART check)
+    // Write to scratch register and read back
+    outb(SERIAL_PORT + 7, 0x55);
+    if (inb(SERIAL_PORT + 7) == 0x55) {
+        outb(SERIAL_PORT + 7, 0xAA);
+        if (inb(SERIAL_PORT + 7) == 0xAA) {
+            input_map_set_status(INPUT_SRC_SERIAL, INPUT_STATUS_CONNECTED);
+        }
+    }
+
+    // 2. Detect PS/2 Keyboard
+    // Send Echo command (0xEE), if we get 0xEE back, it's there.
+    // Or just check if there's any life.
+    outb(0x60, 0xEE);
+    for(volatile int i=0; i<10000; i++); // Wait
+    if (inb(0x60) == 0xEE) {
+        input_map_set_status(INPUT_SRC_PS2, INPUT_STATUS_CONNECTED);
+    }
+}
+
 void console_init() {
     outb(SERIAL_PORT + 1, 0x00);
     outb(SERIAL_PORT + 3, 0x80);
@@ -39,6 +60,7 @@ void console_init() {
     outb(SERIAL_PORT + 4, 0x0B);
 
     console_ps2_init();
+    console_detect_hardware();
 
     state = (console_state_t*)memory_alloc(sizeof(console_state_t));
     if (state) {

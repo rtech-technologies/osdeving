@@ -33,15 +33,10 @@ void usb_keyboard_process_report(const uint8* data, uint32 len) {
         }
     }
 
-    // Update modifiers if they changed (even if no keys pressed)
-    // Here we push a dummy event or just update the internal state of input_map if we had a dedicated modifier setter.
-    // For now, input_map_push handles modifiers per key.
-
     for (int i = 0; i < 8; i++) ((uint8*)&prev_report)[i] = data[i];
 }
 
 void usb_keyboard_init(void) {
-    // Controller is initialized via init ritual (xhci_init)
 }
 
 int usb_has_key(void) {
@@ -58,7 +53,17 @@ void usb_poll_all(void) {
     xhci_poll();
 }
 
+static const char* src_names[] = {"PS/2 Keyboard", "USB HID Keyboard", "Serial Terminal"};
+
 void usb_lsdev(void) {
-    console_print("OSx2 Native USB Stack (xHCI Standard)\n");
-    xhci_poll();
+    console_print("--- OSx2 Input System Inventory ---\n");
+    for (int i = 0; i < INPUT_SRC_MAX; i++) {
+        console_print(src_names[i]);
+        console_print(": ");
+        if (input_map_get_status(i) == INPUT_STATUS_CONNECTED) {
+            console_print("ONLINE\n");
+        } else {
+            console_print("NOT DETECTED\n");
+        }
+    }
 }
