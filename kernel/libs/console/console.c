@@ -27,7 +27,19 @@ static void ps2_wait_read() {
     while (!(inb(PS2_STATUS_PORT) & 0x01));
 }
 
+static void console_print_hex(uint8 n) {
+    const char* hex = "0123456789ABCDEF";
+    char buf[5];
+    buf[0] = '0';
+    buf[1] = 'x';
+    buf[2] = hex[(n >> 4) & 0xF];
+    buf[3] = hex[n & 0xF];
+    buf[4] = 0;
+    console_print(buf);
+}
+
 void console_ps2_setup() {
+    console_print("PS/2: Initializing Controller (Polling Mode)...\n");
     // Controller Initialization
     ps2_wait_write();
     outb(PS2_STATUS_PORT, 0xAD); // disable port 1
@@ -44,6 +56,10 @@ void console_ps2_setup() {
     uint8 config = inb(PS2_DATA_PORT);
 
     // Modify config (clear bits 0, 1, 6)
+    console_print("PS/2: Disabling IRQs and Translation. Old Config: ");
+    console_print_hex(config);
+    console_print("\n");
+
     config &= ~( (1 << 0) | (1 << 1) | (1 << 6) );
     ps2_wait_write();
     outb(PS2_STATUS_PORT, 0x60);
@@ -167,17 +183,6 @@ static void scroll() {
     state->y -= lh;
 }
 
-static void console_print_hex(uint8 n) {
-    const char* hex = "0123456789ABCDEF";
-    char buf[5];
-    buf[0] = '0';
-    buf[1] = 'x';
-    buf[2] = hex[(n >> 4) & 0xF];
-    buf[3] = hex[n & 0xF];
-    buf[4] = 0;
-    console_print(buf);
-}
-
 void console_print(const char* str) {
     while (*str) {
         char c = *str++;
@@ -221,10 +226,13 @@ char console_read_key() {
     usb_poll_all();
 
     // B. Priority 2: Legacy PS/2
-    if (inb(PS2_STATUS_PORT) & 1) {
+    uint8 ps2_status = inb(PS2_STATUS_PORT);
+    if (ps2_status & 1) {
         uint8 scancode = inb(PS2_DATA_PORT);
-        // Debug log to serial
-        console_print("PS/2 Scancode: ");
+        // Debug log to serial with status
+        console_print("PS/2 Polling [Status: ");
+        console_print_hex(ps2_status);
+        console_print("] Scancode: ");
         console_print_hex(scancode);
         console_print("\n");
 
