@@ -12,9 +12,13 @@ void main() {
     void* buffer = alloc(SHELL_BUFFER_SIZE);
 
     while (running) {
+#ifdef CONFIG_SHELL_AUTOSTART
         if (fread("/shell.bin", buffer, SHELL_BUFFER_SIZE) > 0) {
             typedef int (*shell_t)(syscall_table_t*);
             ((shell_t)buffer)(&ksyscalls);
+#else
+        if (0) {
+#endif
             if (running) {
                 print("\nRestarting Shell...\n");
                 for (volatile int i=0; i<20000000; i++);

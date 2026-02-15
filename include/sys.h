@@ -2,6 +2,7 @@
 #define SYS_H
 
 #include "types.h"
+#include "config.h"
 #include "system.h"
 
 // Kernel Library Headers

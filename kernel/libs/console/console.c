@@ -112,6 +112,7 @@ static void scroll() {
 void console_print(const char* str) {
     while (*str) {
         char c = *str++;
+#ifdef CONFIG_SERIAL_DEBUG
         if (c == '\n') {
             while (!(inb(SERIAL_PORT + 5) & 0x20));
             outb(SERIAL_PORT, '\r');
@@ -121,6 +122,7 @@ void console_print(const char* str) {
             while (!(inb(SERIAL_PORT + 5) & 0x20));
             outb(SERIAL_PORT, c);
         }
+#endif
 
         if (!state || !state->params || !state->params->framebuffer) continue;
         if (c == '\n') {

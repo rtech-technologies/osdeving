@@ -47,13 +47,20 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
 BOOT_IMG = boot.img
+
+# Load configuration if it exists
+-include .config
+
+# Default values if not set in .config
+CONFIG_MEMORY_MB ?= 512
+
 # QEMU Run Configuration
-QEMU_BASE_FLAGS = -m 512M -net none
+QEMU_BASE_FLAGS = -m $(CONFIG_MEMORY_MB)M -net none -machine pc
 QEMU_DEVICES = -device qemu-xhci -device usb-kbd -device usb-mouse -device usb-tablet
 
-.PHONY: all clean run run-serial setup compile make vga_test update
+.PHONY: all clean run run-serial setup compile make vga_test update menuconfig
 
-all: $(KERNEL_EFI) shell.bin $(BOOT_IMG)
+all: include/config.h $(KERNEL_EFI) shell.bin $(BOOT_IMG)
 
 make: all
 
@@ -132,3 +139,9 @@ update: clean
 	mkdir -p ~/Downloads
 	cp -r . ~/Downloads/osx2_repo
 	rm -rf $(CURDIR)
+
+menuconfig:
+	python3 scripts/menuconfig.py
+
+include/config.h:
+	python3 scripts/menuconfig.py --default # I should add a default mode to the script
