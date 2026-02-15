@@ -47,6 +47,7 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
 BOOT_IMG = boot.img
+BOOT_ISO = boot.iso
 
 # Load configuration if it exists
 -include .config
@@ -60,14 +61,14 @@ QEMU_DEVICES = -device qemu-xhci -device usb-kbd -device usb-mouse -device usb-t
 
 .PHONY: all clean run run-serial setup compile make vga_test update menuconfig
 
-all: include/config.h $(KERNEL_EFI) shell.bin $(BOOT_IMG)
+all: include/config.h $(KERNEL_EFI) shell.bin $(BOOT_IMG) $(BOOT_ISO)
 
 make: all
 
 compile: all
 
 setup:
-	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools
+	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools xorriso
 	mkdir -p boot kernel/libs kernel/unice64 include programs
 	@if [ ! -f boot/linker.ld ]; then \
 		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > boot/linker.ld; \
@@ -97,6 +98,13 @@ $(BOOT_IMG): $(KERNEL_EFI) shell.bin
 	mmd -i $(BOOT_IMG) ::/EFI/BOOT
 	mcopy -i $(BOOT_IMG) $(KERNEL_EFI) ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i $(BOOT_IMG) shell.bin ::/shell.bin
+
+$(BOOT_ISO): $(BOOT_IMG)
+	mkdir -p iso_root/EFI/BOOT
+	cp $(KERNEL_EFI) iso_root/EFI/BOOT/BOOTX64.EFI
+	cp shell.bin iso_root/shell.bin
+	cp $(BOOT_IMG) iso_root/efiboot.img
+	xorriso -as mkisofs -R -f -e efiboot.img -no-emul-boot -o $(BOOT_ISO) iso_root
 
 run: all
 	qemu-system-x86_64 \
@@ -132,8 +140,8 @@ clean:
       kernel/libs/usb_keyboard/*.o \
 	      kernel/libs/stup/*.o \
 	      programs/*.o shell.elf shell.bin
-	rm -f $(BOOT_IMG)
-	rm -rf disk
+	rm -f $(BOOT_IMG) $(BOOT_ISO)
+	rm -rf disk iso_root
 
 update: clean
 	mkdir -p ~/Downloads
