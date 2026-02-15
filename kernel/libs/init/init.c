@@ -1,10 +1,12 @@
-#include "sys"
+#include "sys.h"
 
 void init(boot_params_t* params) {
     kparams = params;
 
     // 1. Registry Ritual
     register_service(input_map_init);
+    register_service(pci_init);
+    register_service(devman_init);
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
@@ -27,6 +29,7 @@ void init(boot_params_t* params) {
     ksyscalls.read_key = read_key;
     ksyscalls.input = input;
     ksyscalls.lsdev = usb_lsdev;
+    ksyscalls.devman = devman_show;
     ksyscalls.exit = kernel_exit;
 
     // 4. System Initialization Event

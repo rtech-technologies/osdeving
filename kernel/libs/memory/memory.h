@@ -4,6 +4,7 @@
 #include "types.h"
 
 void memory_init();
+void memory_get_usage(size_t* total, size_t* used);
 void* memory_alloc(UINTN size);
 void memory_free(void* ptr);
 

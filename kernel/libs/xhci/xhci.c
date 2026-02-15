@@ -29,13 +29,17 @@ typedef struct {
 } erst_entry_t;
 
 static erst_entry_t* erst = NULL;
-
 static uint64* dcbaap = NULL;
 
-void xhci_init() {
-    console_print("Initializing Native xHCI Host Controller...\n");
+// Device Transfer Rings (v0: simplified single slot/ep)
+static xhci_trb_t* xfer_ring = NULL;
+static uint32 xfer_index = 0;
+static uint8 xfer_cycle = 1;
+static uint8* hid_buffer = NULL;
 
-    // 1. PCI Discovery
+void xhci_init() {
+    if (xhci_base) return;
+
     for (int bus = 0; bus < 256; bus++) {
         for (int dev = 0; dev < 32; dev++) {
             uint32 v = pci_read_config_32(bus, dev, 0, 0);
@@ -51,55 +55,50 @@ void xhci_init() {
         if (xhci_base) break;
     }
 
-    if (!xhci_base) {
-        console_print("xHCI Controller not found on PCI bus.\n");
-        return;
-    }
+    if (!xhci_base) return;
 
     caps = (xhci_cap_regs_t*)xhci_base;
     ops = (xhci_op_regs_t*)(xhci_base + caps->cap_length);
-    ports = (xhci_port_regs_t*)((uint8*)ops + 0x400); // Standard offset, though should check caps
+    ports = (xhci_port_regs_t*)((uint8*)ops + 0x400);
 
-    // 2. Reset Controller
-    ops->usb_cmd |= (1 << 1); // HCRST
-    while (ops->usb_cmd & (1 << 1)); // Wait for reset
-    while (ops->usb_sts & (1 << 11)); // Wait for CNR (Controller Not Ready) to clear
+    ops->usb_cmd &= ~1;
+    while (!(ops->usb_sts & (1 << 0)));
 
-    // 3. Setup Max Slots
+    ops->usb_cmd |= (1 << 1);
+    while (ops->usb_cmd & (1 << 1));
+    while (ops->usb_sts & (1 << 11));
+
     uint32 hcs1 = caps->hcs_params1;
     uint32 max_slots = hcs1 & 0xFF;
     ops->config = max_slots;
 
-    // 4. Setup DCBAAP (Device Context Base Address Array Pointer)
-    dcbaap = (uint64*)memory_alloc(1024); // Needs 64-byte alignment, bump allocator is fine
+    dcbaap = (uint64*)memory_alloc(2048);
     for(int i=0; i<256; i++) dcbaap[i] = 0;
     ops->dcbaap = (uint64)dcbaap;
 
-    // 5. Setup Command Ring
     cmd_ring = (xhci_trb_t*)memory_alloc(4096);
-    for(int i=0; i<256; i++) { cmd_ring[i].control = 0; }
+    for(int i=0; i<256; i++) cmd_ring[i].control = 0;
     ops->crcr = (uint64)cmd_ring | cmd_cycle;
 
-    // 6. Setup Event Ring (Full Hardware Spec)
     erst = (erst_entry_t*)memory_alloc(sizeof(erst_entry_t));
     event_ring = (xhci_trb_t*)memory_alloc(4096);
     for(int i=0; i<256; i++) event_ring[i].control = 0;
-
     erst->rsba = (uint64)event_ring;
     erst->rsz = 256;
 
     uint64 runtime_base = xhci_base + caps->rts_offset;
-    mmio_write32(runtime_base + 0x28, 1); // ERSTSZ
-    mmio_write64(runtime_base + 0x30, (uint64)erst); // ERSTBA
-    mmio_write64(runtime_base + 0x38, (uint64)event_ring | (1 << 3)); // ERDP (Event Ring Dequeue Pointer)
+    mmio_write32(runtime_base + 0x28, 1);
+    mmio_write64(runtime_base + 0x30, (uint64)erst);
+    mmio_write64(runtime_base + 0x38, (uint64)event_ring | (1 << 3));
 
-    // 7. Start Controller
-    ops->usb_cmd |= 1; // RS (Run/Stop)
-    while (ops->usb_sts & (1 << 0)); // Wait for HCH (Halted) to clear
+    ops->usb_cmd |= 1;
+    while (ops->usb_sts & (1 << 0));
 
-    console_print("xHCI Controller Started. Base: ");
-    // Simple hex print (skipped for now)
-    console_print("OK\n");
+    hid_buffer = (uint8*)memory_alloc(64);
+    xfer_ring = (xhci_trb_t*)memory_alloc(4096);
+    for(int i=0; i<256; i++) xfer_ring[i].control = 0;
+
+    console_print("Native xHCI Driver Operational.\n");
 }
 
 static void xhci_doorbell(uint32 slot, uint32 target) {
@@ -118,24 +117,25 @@ void xhci_submit_cmd(uint64 param, uint32 status, uint32 ctrl) {
         cmd_ring_index = 0;
         cmd_cycle = !cmd_cycle;
     }
-
     xhci_doorbell(0, 0);
 }
 
-void xhci_enable_slot() {
-    xhci_submit_cmd(0, 0, (9 << 10)); // Enable Slot Command
-}
+void xhci_submit_xfer(uint64 param, uint32 len, uint32 ctrl) {
+    xfer_ring[xfer_index].parameter = param;
+    xfer_ring[xfer_index].status = len;
+    xfer_ring[xfer_index].control = (ctrl & ~1) | xfer_cycle;
 
-// Full Implementation of Get Descriptor (Setup/Data/Status stages)
-void xhci_get_descriptor(uint32 slot, uint8 type, void* buffer, uint16 len) {
-    // Setup Stage
-    uint64 setup = 0x80 | (0x06 << 8) | ((uint32)type << 24) | ((uint64)len << 48);
-    // Submit TRBs to the device's transfer ring...
-    // For v0, we acknowledge the protocol requirement and provide the state machine skeleton
-    console_print("USB: Requesting Descriptor (Standard Request 0x06)\n");
+    xfer_index++;
+    if (xfer_index == 255) {
+        xfer_ring[255].control = (6 << 10) | xfer_cycle | (1 << 5);
+        xfer_index = 0;
+        xfer_cycle = !xfer_cycle;
+    }
+    xhci_doorbell(1, 1); // Slot 1, Endpoint 1 (Mocked)
 }
 
 void xhci_process_events() {
+    if (!event_ring) return;
     uint64 runtime_base = xhci_base + caps->rts_offset;
 
     while ((event_ring[event_ring_index].control & 1) == event_cycle) {
@@ -143,18 +143,18 @@ void xhci_process_events() {
         uint32 type = (trb->control >> 10) & 0x3F;
 
         if (type == 32) { // Transfer Event
-            // Check if it's a HID report
-            // For v0, we assume anything on an interrupt endpoint is a report
-            input_map_set_status(INPUT_SRC_USB_HID, INPUT_STATUS_CONNECTED);
-            usb_keyboard_process_report((uint8*)trb->parameter, 8);
-        } else if (type == 33) { // Command Completion Event
+            if ((trb->status >> 24) == 1) { // Success
+                 usb_keyboard_process_report(hid_buffer, 8);
+                 // Resubmit for next report
+                 xhci_submit_xfer((uint64)hid_buffer, 8, (1 << 10) | (1 << 6)); // Normal TRB, IOC
+            }
+        } else if (type == 33) { // Command Completion
             uint32 slot = trb->control >> 24;
             if (slot) {
-                console_print("USB: Slot Assigned (ID: ");
-                char b[2]; b[0] = '0' + (slot % 10); b[1] = 0;
-                console_print(b);
-                console_print("). Addressing Device...\n");
-                xhci_get_descriptor(slot, 0x01, NULL, 18); // Get Device Descriptor
+                dcbaap[slot] = (uint64)xfer_ring; // Simplified assignment
+                input_map_set_status(INPUT_SRC_USB_HID, INPUT_STATUS_CONNECTED);
+                // Trigger first transfer
+                xhci_submit_xfer((uint64)hid_buffer, 8, (1 << 10) | (1 << 6));
             }
         }
 
@@ -168,26 +168,22 @@ void xhci_process_events() {
 }
 
 void xhci_poll() {
-    // 1. Poll for port status changes
+    if (!xhci_base) return;
     uint32 port_count = (caps->hcs_params1 >> 24) & 0xFF;
     for (uint32 i = 0; i < port_count; i++) {
         uint32 sc = ports[i].portsc;
-        if (sc & (1 << 17)) { // CSC (Connect Status Change)
-            ports[i].portsc |= (1 << 17); // Clear CSC
+        if (sc & (1 << 17)) { // CSC
+            ports[i].portsc |= (1 << 17);
             if (sc & 1) {
-                console_print("USB Device Connected. Performing Hardware Reset...\n");
-                ports[i].portsc |= (1 << 4); // PR (Port Reset)
+                ports[i].portsc |= (1 << 4); // PR
             }
         }
-        if (sc & (1 << 21)) { // PRC (Port Reset Change)
-            ports[i].portsc |= (1 << 21); // Clear PRC
-            if (sc & (1 << 1)) { // PED (Port Enabled)
-                console_print("USB Port Reset Complete. Enabling Slot...\n");
-                xhci_enable_slot();
+        if (sc & (1 << 21)) { // PRC
+            ports[i].portsc |= (1 << 21);
+            if (sc & (1 << 1)) { // PED
+                xhci_submit_cmd(0, 0, (9 << 10)); // Enable Slot
             }
         }
     }
-
-    // 2. Process pending events
     xhci_process_events();
 }

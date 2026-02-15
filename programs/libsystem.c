@@ -1,4 +1,4 @@
-#include "../include/sys"
+#include "system.h"
 
 static syscall_table_t* global_table = (void*)0;
 
@@ -44,6 +44,10 @@ void input(const char* prompt, char* buffer, size_t size) {
 
 void lsdev() {
     if (global_table) global_table->lsdev();
+}
+
+void devman() {
+    if (global_table) global_table->devman();
 }
 
 void exit() {

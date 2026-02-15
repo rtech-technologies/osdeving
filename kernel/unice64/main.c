@@ -1,6 +1,6 @@
 #include <efi.h>
 #include <efilib.h>
-#include "sys"
+#include "sys.h"
 
 #define KERNEL_HEAP_SIZE (4 * 1024 * 1024)
 

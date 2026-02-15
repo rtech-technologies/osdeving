@@ -7,7 +7,7 @@ A modular UEFI kernel built with a strict service-registry architecture.
 - `/kernel/unice64/`: Core kernel logic (UEFI entry, syscall dispatch).
 - `/kernel/libs/`: Service libraries (Console, Memory, Disk, FS, Event, Init).
 - `/kernel/libs/stup/`: Startup and main kernel loop.
-- `/include/`: Public API headers. `include/sys` is the master header.
+- `/include/`: Public API headers. `include/sys.h` is the master header.
 - `/programs/`: User programs (e.g., shell).
 - `/boot/`: Linker scripts and boot configuration.
 

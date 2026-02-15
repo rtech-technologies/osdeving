@@ -14,6 +14,11 @@ void memory_set_heap(void* base, size_t size) {
 void memory_init() {
 }
 
+void memory_get_usage(size_t* total, size_t* used) {
+    if (total) *total = (size_t)heap_size;
+    if (used) *used = (size_t)heap_offset;
+}
+
 void* memory_alloc(size_t size) {
     if (heap_base == NULL || heap_offset + (UINTN)size > heap_size) {
         return NULL;

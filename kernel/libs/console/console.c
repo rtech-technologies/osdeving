@@ -144,18 +144,24 @@ void console_print(const char* str) {
 }
 
 char console_read_key() {
-    // Poll Native Drivers
+    // 1. Unified Polling Order: USB > PS/2 > Serial
+    // (with conditional hardware probing if ONLINE)
+
+    // A. Priority 1: Native USB HID
     usb_poll_all();
 
-    // Poll Serial
-    if (inb(SERIAL_PORT + 5) & 1) {
-        input_map_push(INPUT_SRC_SERIAL, inb(SERIAL_PORT), 0);
+    // B. Priority 2: Legacy PS/2
+    if (input_map_get_status(INPUT_SRC_PS2) == INPUT_STATUS_CONNECTED) {
+        if (inb(PS2_STATUS_PORT) & 1) {
+            input_map_push(INPUT_SRC_PS2, inb(PS2_DATA_PORT), 0);
+        }
     }
 
-    // Poll PS/2
-    if (inb(PS2_STATUS_PORT) & 1) {
-        uint8 s = inb(PS2_DATA_PORT);
-        input_map_push(INPUT_SRC_PS2, s, 0);
+    // C. Priority 3: Serial Terminal
+    if (input_map_get_status(INPUT_SRC_SERIAL) == INPUT_STATUS_CONNECTED) {
+        if (inb(SERIAL_PORT + 5) & 1) {
+            input_map_push(INPUT_SRC_SERIAL, inb(SERIAL_PORT), 0);
+        }
     }
 
     return input_map_pop_char();

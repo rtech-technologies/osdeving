@@ -1,4 +1,4 @@
-#include "../../include/sys"
+#include "../../include/sys.h"
 
 #define MAX_SERVICES 32
 static service_init_t services[MAX_SERVICES];

@@ -13,6 +13,7 @@ void wait_for_key();
 char read_key();
 void input(const char* prompt, char* buffer, size_t size);
 void lsdev();
+void devman();
 void exit();
 
 // Syscall Table Structure
@@ -26,6 +27,7 @@ typedef struct {
     char (*read_key)();
     void (*input)(const char*, char*, size_t);
     void (*lsdev)();
+    void (*devman)();
     void (*exit)();
 } syscall_table_t;
 

@@ -1,4 +1,4 @@
-#include "sys"
+#include "sys.h"
 
 #define SHELL_BUFFER_SIZE 65536
 

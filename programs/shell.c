@@ -1,4 +1,4 @@
-#include "sys"
+#include "system.h"
 
 int strcmp(const char* s1, const char* s2) {
     while (*s1 && (*s1 == *s2)) { s1++; s2++; }
@@ -17,9 +17,11 @@ int program_main() {
             exit();
             return 0;
         } else if (strcmp(buffer, "help") == 0) {
-            print("Commands: lsdev, help, exit\n");
+            print("Commands: devman, lsdev, help, exit\n");
         } else if (strcmp(buffer, "lsdev") == 0) {
             lsdev();
+        } else if (strcmp(buffer, "devman") == 0) {
+            devman();
         } else if (buffer[0]) {
             print("Bad command or file name: "); print(buffer); print("\n");
         }

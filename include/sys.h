@@ -13,6 +13,8 @@
 #include "../kernel/libs/init/init.h"
 #include "../kernel/libs/input/input_map.h"
 #include "../kernel/libs/xhci/xhci.h"
+#include "../kernel/libs/pci/pci.h"
+#include "../kernel/libs/devman/devman.h"
 #include "../kernel/libs/usb_keyboard/usb_keyboard.h"
 #include "../kernel/unice64/kernel.h"
 

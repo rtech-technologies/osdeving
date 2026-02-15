@@ -1,4 +1,4 @@
-#include "../include/sys"
+#include "system.h"
 
 extern int program_main();
 extern void libsystem_init(syscall_table_t* table);
