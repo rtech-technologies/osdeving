@@ -51,7 +51,7 @@ BOOT_IMG = boot.img
 QEMU_BASE_FLAGS = -m 512M -net none
 QEMU_DEVICES = -device qemu-xhci -device usb-kbd -device usb-mouse -device usb-tablet
 
-.PHONY: all clean run run-serial setup compile make vga_test
+.PHONY: all clean run run-serial setup compile make vga_test update
 
 all: $(KERNEL_EFI) shell.bin $(BOOT_IMG)
 
@@ -127,3 +127,8 @@ clean:
 	      programs/*.o shell.elf shell.bin
 	rm -f $(BOOT_IMG)
 	rm -rf disk
+
+update: clean
+	mkdir -p ~/Downloads
+	cp -r . ~/Downloads/osx2_repo
+	rm -rf $(CURDIR)
