@@ -1,21 +1,42 @@
 #include "disk.h"
-
-static EFI_FILE_PROTOCOL* root_dir = NULL;
-
-static EFI_GUID li_g = {0x5B1B31A1, 0x9562, 0x11D2, {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
-static EFI_GUID fs_g = {0x0964E5B2, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
+#include "../kernel/kernel.h"
 
 void disk_init() {
-    if (!ST_PTR || !ST_PTR->BootServices) return;
-
-    EFI_LOADED_IMAGE_PROTOCOL* li;
-    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* fs;
-
-    if (ST_PTR->BootServices->HandleProtocol(ImageHandle_PTR, &li_g, (void**)&li) != EFI_SUCCESS) return;
-    if (ST_PTR->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs) != EFI_SUCCESS) return;
-    if (fs->OpenVolume(fs, &root_dir) != EFI_SUCCESS) return;
+    /* Ramdisk is already in memory */
 }
 
-EFI_FILE_PROTOCOL* disk_get_root() {
-    return root_dir;
+int read_sectors(uint64 lba, uint32 count, void* buffer) {
+    if (!kboot_params.ramdisk_base) return 0;
+
+    uint64 offset = lba * 512;
+    uint64 size = (uint64)count * 512;
+
+    if (offset + size > kboot_params.ramdisk_size) return 0;
+
+    uint8* src = (uint8*)kboot_params.ramdisk_base + offset;
+    uint8* dst = (uint8*)buffer;
+
+    for (uint64 i = 0; i < size; i++) {
+        dst[i] = src[i];
+    }
+
+    return 1;
+}
+
+int write_sectors(uint64 lba, uint32 count, const void* buffer) {
+    if (!kboot_params.ramdisk_base) return 0;
+
+    uint64 offset = lba * 512;
+    uint64 size = (uint64)count * 512;
+
+    if (offset + size > kboot_params.ramdisk_size) return 0;
+
+    const uint8* src = (const uint8*)buffer;
+    uint8* dst = (uint8*)kboot_params.ramdisk_base + offset;
+
+    for (uint64 i = 0; i < size; i++) {
+        dst[i] = src[i];
+    }
+
+    return 1;
 }

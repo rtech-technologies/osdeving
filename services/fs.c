@@ -1,36 +1,19 @@
 #include "fs.h"
-#include "disk.h"
+#include "rnafs.h"
 
 void fs_init() {
+    /* RNAFS is initialized via rnafs_mount in kernel_main if needed */
 }
 
-INTN fread(const char* path, void* buffer, UINTN max_size) {
-    EFI_FILE_PROTOCOL* root = disk_get_root();
-    if (!root) return -1;
-
-    EFI_FILE_PROTOCOL* file;
-    CHAR16 wpath[256];
-    UINTN i = 0;
-    while (path[i] && i < 255) {
-        wpath[i] = (CHAR16)path[i];
-        i++;
-    }
-    wpath[i] = 0;
-
-    if (root->Open(root, &file, wpath, 1, 0) != EFI_SUCCESS) { // 1 is EFI_FILE_MODE_READ
-        return -1;
-    }
-
-    UINTN size = max_size;
-    if (file->Read(file, &size, buffer) != EFI_SUCCESS) {
-        file->Close(file);
-        return -1;
-    }
-
-    file->Close(file);
-    return (INTN)size;
+INTN fread(const char* path, void* buffer, uint64 max_size) {
+    /* Category 12: use custom types */
+    const char* name = path;
+    if (name[0] == '/') name++;
+    return (INTN)rnafs_read_file(name, buffer, (uint32)max_size);
 }
 
-INTN fwrite(const char* path, const void* buffer, UINTN size) {
-    return -1;
+INTN fwrite(const char* path, const void* buffer, uint64 size) {
+    const char* name = path;
+    if (name[0] == '/') name++;
+    return (INTN)rnafs_write_file(name, buffer, (uint32)size);
 }

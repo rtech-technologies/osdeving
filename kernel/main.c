@@ -3,27 +3,19 @@
 #include "../services/memory.h"
 #include "../services/disk.h"
 #include "../services/fs.h"
+#include "../services/rnafs.h"
 #include "../services/event.h"
 
-EFI_SYSTEM_TABLE *ST_PTR;
-EFI_HANDLE ImageHandle_PTR;
+boot_params_t kboot_params;
 int running = 1;
 
 #define MAX_SERVICES 16
 static service_init_t registered_services[MAX_SERVICES];
-static UINTN service_count = 0;
+static uint32 service_count = 0;
 
 void register_service(service_init_t init_func) {
     if (service_count < MAX_SERVICES) {
         registered_services[service_count++] = init_func;
-    }
-}
-
-void on_init(event_t event) {
-    if (event == EVENT_INIT) {
-        for (UINTN i = 0; i < service_count; i++) {
-            registered_services[i]();
-        }
     }
 }
 
@@ -33,46 +25,46 @@ void exit() {
     trigger(EVENT_EXIT);
 }
 
-void kernel_main() {
-    // 1. Setup Event System
-    event_init();
-    register_event_handler(on_init);
+void kernel_main(boot_params_t* params) {
+    /* Copy boot params - Category 11: raw hardware info */
+    kboot_params = *params;
 
-    // 2. Register Services
+    /* 1. Register Services */
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
     register_service(fs_init);
 
-    // 3. Trigger INIT event
+    /* 2. Initialize Services (Registry Ritual) */
+    for (uint32 i = 0; i < service_count; i++) {
+        registered_services[i]();
+    }
+
+    /* Mount RNAFS (v0: hardcoded LBA 0 of ramdisk) */
+    rnafs_mount(0);
+
     trigger(EVENT_INIT);
 
     print("Kernel started\n");
 
-    // 4. Load Shell
+    /* 3. Load and run shell (v0: hardcoded loading) */
     void* shell_buf = alloc(65536);
     if (shell_buf) {
-        INTN sz = fread("shell.bin", shell_buf, 65536);
-        if (sz > 0) {
+        /* In v0, disk service accesses ramdisk populated by loader */
+        if (fread("shell.bin", shell_buf, 65536) > 0) {
             print("Loaded shell.bin\n");
-            void (*shell_entry)(EFI_SYSTEM_TABLE*) = (void (*)(EFI_SYSTEM_TABLE*))shell_buf;
-            shell_entry(ST_PTR);
+            void (*shell_entry)(boot_params_t*) = (void (*)(boot_params_t*))shell_buf;
+            shell_entry(&kboot_params);
         } else {
             print("Failed to load shell.bin\n");
         }
     }
 
-    // 5. Main Loop
+    /* 4. Event Loop */
     while (running) {
         trigger(EVENT_MAIN);
     }
-}
 
-EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
-    ST_PTR = SystemTable;
-    ImageHandle_PTR = ImageHandle;
-
-    kernel_main();
-
-    return EFI_SUCCESS;
+    trigger(EVENT_CLEANUP);
+    trigger(EVENT_EXIT);
 }
