@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "config.h"
+#include "osinfo.h"
 #include "system.h"
 
 // Kernel Library Headers

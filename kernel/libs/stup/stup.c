@@ -8,7 +8,8 @@ void stup(boot_params_t* params) {
 }
 
 void main() {
-    print("OSx2 (RTECH dos) Kernel Online\n");
+    print(OS_PRETTY_NAME);
+    print(" Kernel Online\n");
     void* buffer = alloc(SHELL_BUFFER_SIZE);
 
     while (running) {

@@ -2,6 +2,7 @@
 #define SYSTEM_H
 
 #include "types.h"
+#include "osinfo.h"
 
 // Public API for programs
 void print(const char* str);

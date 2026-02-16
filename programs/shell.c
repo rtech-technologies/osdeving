@@ -15,7 +15,12 @@ uint32 atoi(const char* s) {
 }
 
 int program_main() {
-    print("RTECH dos Shell v1.0 (OSx2)\n");
+    print(OS_VENDOR);
+    print(" Shell v");
+    print(OS_VERSION);
+    print(" (");
+    print(OS_NAME);
+    print(")\n");
     char buffer[128];
 
     while (1) {
