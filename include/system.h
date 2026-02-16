@@ -2,55 +2,13 @@
 #define SYSTEM_H
 
 #include "types.h"
-#include "osinfo.h"
 
 // Public API for programs
 void print(const char* str);
-void* alloc(size_t size);
-void free(void* ptr);
 INTN fread(const char* path, void* buffer, UINTN max_size);
-INTN fwrite(const char* path, const void* buffer);
-void wait_for_key();
-char read_key();
-void input(const char* prompt, char* buffer, size_t size);
-void lsdev();
-void devman();
+INTN fwrite(const char* path, const void* buffer, UINTN size);
+void* alloc(UINTN size);
+void free(void* ptr);
 void exit();
-
-// Diskman / FS Extended
-void format();
-void mount(int idx);
-void lsfs();
-INTN fwrite_sized(const char* path, const void* buffer, UINTN size);
-INTN fdelete(const char* path);
-void addpart(uint64 start, uint32 count);
-void mkfat(int idx);
-void reboot();
-void shutdown();
-
-// Syscall Table Structure
-typedef struct {
-    void (*print)(const char*);
-    void* (*alloc)(size_t);
-    void (*free)(void*);
-    INTN (*fread)(const char*, void*, UINTN);
-    INTN (*fwrite)(const char*, const void*);
-    void (*wait_for_key)();
-    char (*read_key)();
-    void (*input)(const char*, char*, size_t);
-    void (*lsdev)();
-    void (*devman)();
-    void (*exit)();
-
-    void (*format)();
-    void (*mount)(int);
-    void (*lsfs)();
-    INTN (*fwrite_sized)(const char*, const void*, UINTN);
-    INTN (*fdelete)(const char*);
-    void (*addpart)(uint64, uint32);
-    void (*mkfat)(int);
-    void (*reboot)();
-    void (*shutdown)();
-} syscall_table_t;
 
 #endif

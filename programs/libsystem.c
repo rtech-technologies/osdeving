@@ -1,93 +1,14 @@
-#include "system.h"
+#include "../include/system.h"
+#include "../kernel/kernel.h"
 
-static syscall_table_t* global_table = (void*)0;
+EFI_SYSTEM_TABLE *ST_PTR;
 
-void libsystem_init(syscall_table_t* table) {
-    global_table = table;
-}
-
-void print(const char* str) {
-    if (global_table) global_table->print(str);
-}
-
-void* alloc(size_t size) {
-    if (global_table) return global_table->alloc(size);
-    return (void*)0;
-}
-
-void free(void* ptr) {
-    if (global_table) global_table->free(ptr);
-}
-
-INTN fread(const char* path, void* buffer, UINTN max_size) {
-    if (global_table) return global_table->fread(path, buffer, max_size);
-    return -1;
-}
-
-INTN fwrite(const char* path, const void* buffer) {
-    if (global_table) return global_table->fwrite(path, buffer);
-    return -1;
-}
-
-void wait_for_key() {
-    if (global_table) global_table->wait_for_key();
-}
-
-char read_key() {
-    if (global_table) return global_table->read_key();
-    return 0;
-}
-
-void input(const char* prompt, char* buffer, size_t size) {
-    if (global_table) global_table->input(prompt, buffer, size);
-}
-
-void lsdev() {
-    if (global_table) global_table->lsdev();
-}
-
-void devman() {
-    if (global_table) global_table->devman();
-}
+int program_main();
 
 void exit() {
-    if (global_table) global_table->exit();
 }
 
-void format() {
-    if (global_table) global_table->format();
-}
-
-void mount(int idx) {
-    if (global_table) global_table->mount(idx);
-}
-
-void lsfs() {
-    if (global_table) global_table->lsfs();
-}
-
-INTN fwrite_sized(const char* path, const void* buffer, UINTN size) {
-    if (global_table) return global_table->fwrite_sized(path, buffer, size);
-    return -1;
-}
-
-INTN fdelete(const char* path) {
-    if (global_table) return global_table->fdelete(path);
-    return -1;
-}
-
-void addpart(uint64 start, uint32 count) {
-    if (global_table) global_table->addpart(start, count);
-}
-
-void mkfat(int idx) {
-    if (global_table) global_table->mkfat(idx);
-}
-
-void reboot() {
-    if (global_table) global_table->reboot();
-}
-
-void shutdown() {
-    if (global_table) global_table->shutdown();
+void _start(EFI_SYSTEM_TABLE *ST) {
+    ST_PTR = ST;
+    program_main();
 }
