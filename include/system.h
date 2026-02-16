@@ -16,6 +16,12 @@ void lsdev();
 void devman();
 void exit();
 
+// Diskman / FS Extended
+void format();
+void mount();
+void lsfs();
+INTN fwrite_sized(const char* path, const void* buffer, UINTN size);
+
 // Syscall Table Structure
 typedef struct {
     void (*print)(const char*);
@@ -29,6 +35,11 @@ typedef struct {
     void (*lsdev)();
     void (*devman)();
     void (*exit)();
+
+    void (*format)();
+    void (*mount)();
+    void (*lsfs)();
+    INTN (*fwrite_sized)(const char*, const void*, UINTN);
 } syscall_table_t;
 
 #endif

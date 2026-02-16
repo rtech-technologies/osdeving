@@ -53,3 +53,20 @@ void devman() {
 void exit() {
     if (global_table) global_table->exit();
 }
+
+void format() {
+    if (global_table) global_table->format();
+}
+
+void mount() {
+    if (global_table) global_table->mount();
+}
+
+void lsfs() {
+    if (global_table) global_table->lsfs();
+}
+
+INTN fwrite_sized(const char* path, const void* buffer, UINTN size) {
+    if (global_table) return global_table->fwrite_sized(path, buffer, size);
+    return -1;
+}

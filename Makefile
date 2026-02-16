@@ -33,7 +33,9 @@ KERNEL_SRCS = kernel/unice64/main.c \
               kernel/libs/console/font_data.c \
               kernel/libs/memory/memory.c \
               kernel/libs/disk/disk.c \
+              kernel/libs/disk/diskman.c \
               kernel/libs/fs/fs.c \
+              kernel/libs/fs/rnafs.c \
               kernel/libs/event/event.c \
               kernel/libs/input/input_map.c \
               kernel/libs/xhci/xhci.c \

@@ -10,6 +10,7 @@ void init(boot_params_t* params) {
     register_service(console_init);
     register_service(memory_init);
     register_service(disk_init);
+    register_service(diskman_init);
     register_service(fs_init);
 #ifdef CONFIG_USB_SUPPORT
     register_service(xhci_init);
@@ -33,6 +34,11 @@ void init(boot_params_t* params) {
     ksyscalls.lsdev = usb_lsdev;
     ksyscalls.devman = devman_show;
     ksyscalls.exit = kernel_exit;
+
+    ksyscalls.format = diskman_format;
+    ksyscalls.mount = diskman_mount;
+    ksyscalls.lsfs = diskman_ls;
+    ksyscalls.fwrite_sized = fs_write_sized;
 
     // 4. System Initialization Event
     trigger(EVENT_INIT);
