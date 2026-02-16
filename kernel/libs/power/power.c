@@ -14,14 +14,16 @@ void power_init() {
 // Hardware-level reboot
 void reboot() {
     console_print("System Rebooting...\n");
-    // 1. Keyboard controller reset (safe)
-    outb(0x64, 0xFE);
+    // 1. Keyboard controller reset (32-bit safe)
+    unsigned int kbc_cmd = 0xFE;
+    __asm__ volatile ("outl %0, %1" : : "a"(kbc_cmd), "Nd"(0x64));
 
     // 2. Short delay
-    for(volatile int i=0; i<100000; i++);
+    for(volatile int i = 0; i < 100000; i++);
 
     // 3. Legacy system reset port (0x92)
-    outb(0x92, 0x06);
+    unsigned int sys_reset = 0x06;
+    __asm__ volatile ("outl %0, %1" : : "a"(sys_reset), "Nd"(0x92));
 
     // 4. Final fallback: halt CPU
     while(1) { __asm__ volatile("hlt"); }
@@ -31,16 +33,16 @@ void reboot() {
 void shutdown() {
     console_print("System Shutting Down...\n");
     // ACPI S5 soft-off
-    unsigned int value = 0x2000;   // 16-bit S5 + sleep enable, zero-extended to 32-bit
-    outl(0x604, value);            // PM1a control port
+    unsigned int value = 0x2000;   // S5 sleep + sleep enable
+    __asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(0x604)); // PM1a control
 
-    // Optional PM1b (some motherboards)
-    // outl(0x608, value);          // PM1b control port
+    // Optional PM1b (if motherboard present)
+    // __asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(0x608));
 
-    // Small delay to allow motherboard to respond
-    for(volatile int i=0; i<100000; i++);
+    // Small delay for motherboard to respond
+    for(volatile int i = 0; i < 100000; i++);
 
-    // Fallback: halt CPU if motherboard doesn't respond
+    // Fallback: halt CPU if ACPI fails
     while(1) { __asm__ volatile("hlt"); }
 }
 
