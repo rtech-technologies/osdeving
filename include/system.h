@@ -18,7 +18,7 @@ void exit();
 
 // Diskman / FS Extended
 void format();
-void mount();
+void mount(int idx);
 void lsfs();
 INTN fwrite_sized(const char* path, const void* buffer, UINTN size);
 INTN fdelete(const char* path);
@@ -40,7 +40,7 @@ typedef struct {
     void (*exit)();
 
     void (*format)();
-    void (*mount)();
+    void (*mount)(int);
     void (*lsfs)();
     INTN (*fwrite_sized)(const char*, const void*, UINTN);
     INTN (*fdelete)(const char*);

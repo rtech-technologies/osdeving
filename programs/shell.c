@@ -30,7 +30,9 @@ int program_main() {
         } else if (strcmp(buffer, "format") == 0) {
             format();
         } else if (strcmp(buffer, "mount") == 0) {
-            mount();
+            char s_idx[8];
+            input("partition index: ", s_idx, 8);
+            mount(atoi(s_idx));
         } else if (strcmp(buffer, "lsfs") == 0) {
             lsfs();
         } else if (strcmp(buffer, "testfs") == 0) {

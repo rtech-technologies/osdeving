@@ -5,7 +5,7 @@
 
 void diskman_init();
 void diskman_format();
-void diskman_mount();
+void diskman_mount(int partition_index);
 void diskman_ls();
 
 void diskman_add_partition(uint64 start_lba, uint32 sector_count);

@@ -58,8 +58,8 @@ void format() {
     if (global_table) global_table->format();
 }
 
-void mount() {
-    if (global_table) global_table->mount();
+void mount(int idx) {
+    if (global_table) global_table->mount(idx);
 }
 
 void lsfs() {
