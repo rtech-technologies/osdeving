@@ -20,6 +20,14 @@ INTN fs_read(const char* path, void* buffer, UINTN max_size) {
     return -1;
 }
 
+INTN fs_delete(const char* path) {
+    const char* name = path;
+    if (name[0] == '/') name++;
+
+    if (rnafs_delete_file(name)) return 0;
+    return -1;
+}
+
 INTN fs_write(const char* path, const void* buffer) {
     // In v0, we only support writing to RNAFS
     // We assume the caller provides the full buffer and we overwrite.

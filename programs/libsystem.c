@@ -70,3 +70,8 @@ INTN fwrite_sized(const char* path, const void* buffer, UINTN size) {
     if (global_table) return global_table->fwrite_sized(path, buffer, size);
     return -1;
 }
+
+INTN fdelete(const char* path) {
+    if (global_table) return global_table->fdelete(path);
+    return -1;
+}

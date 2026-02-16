@@ -39,6 +39,7 @@ void init(boot_params_t* params) {
     ksyscalls.mount = diskman_mount;
     ksyscalls.lsfs = diskman_ls;
     ksyscalls.fwrite_sized = fs_write_sized;
+    ksyscalls.fdelete = fs_delete;
 
     // 4. System Initialization Event
     trigger(EVENT_INIT);

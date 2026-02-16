@@ -17,7 +17,7 @@ int program_main() {
             exit();
             return 0;
         } else if (strcmp(buffer, "help") == 0) {
-            print("Commands: devman, lsdev, format, mount, lsfs, testfs, help, exit\n");
+            print("Commands: devman, lsdev, format, mount, lsfs, testfs, del, help, exit\n");
         } else if (strcmp(buffer, "format") == 0) {
             format();
         } else if (strcmp(buffer, "mount") == 0) {
@@ -36,6 +36,14 @@ int program_main() {
                 print("Content: "); print(read_buf); print("\n");
             } else {
                 print("Read failed.\n");
+            }
+        } else if (strcmp(buffer, "del") == 0) {
+            char path[64];
+            input("filename: ", path, 64);
+            if (fdelete(path) == 0) {
+                print("Deleted.\n");
+            } else {
+                print("Delete failed.\n");
             }
         } else if (strcmp(buffer, "lsdev") == 0) {
             lsdev();

@@ -41,6 +41,7 @@ int rnafs_create_file(uint32_t parent, const char *name, uint32_t size_bytes);
 int rnafs_read_file(const char *name, void *buffer, uint32_t max_bytes);
 int rnafs_write_file(const char *name, const void *buffer, uint32_t size_bytes);
 int rnafs_append_file(const char *name, const void *buffer, uint32_t size_bytes);
+int rnafs_delete_file(const char *name);
 void rnafs_ls();
 
 #endif

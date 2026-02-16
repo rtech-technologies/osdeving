@@ -65,6 +65,10 @@ static void bitmap_set(uint32 block) {
     rnafs_bitmap[block / 8] |= (1 << (block % 8));
 }
 
+static void bitmap_clear(uint32 block) {
+    rnafs_bitmap[block / 8] &= ~(1 << (block % 8));
+}
+
 static void flush_bitmap() {
     for (uint32 i = 0; i < bitmap_block_count; i++) {
         fs_write_block(1 + i, rnafs_bitmap + (i * FS_BLOCK_SIZE));
@@ -327,6 +331,27 @@ int rnafs_append_file(const char *name, const void *buffer, uint32 size_bytes) {
     flush_dir_table();
 
     return (int)written;
+}
+
+int rnafs_delete_file(const char *name) {
+    if (!rnafs_ready) return 0;
+    int idx = rnafs_find_in_dir(0, name);
+    if (idx < 0) return 0;
+
+    DirEntry *e = &rnafs_dir_table[idx];
+
+    // Clear bitmap blocks
+    for (uint32 i = 0; i < e->block_count; i++) {
+        bitmap_clear(e->first_block + i);
+    }
+
+    // Free entry
+    e->type = 0;
+    memset(e->name, 0, 32);
+
+    flush_bitmap();
+    flush_dir_table();
+    return 1;
 }
 
 void rnafs_ls() {
