@@ -55,12 +55,13 @@ void console_ps2_setup() {
     ps2_wait_read();
     uint8 config = inb(PS2_DATA_PORT);
 
-    // Modify config (clear bits 0, 1, 6)
-    console_print("PS/2: Disabling IRQs and Translation. Old Config: ");
+    // Modify config (clear bits 0, 1, enable bit 6)
+    console_print("PS/2: Disabling IRQs and Enabling Translation. Old Config: ");
     console_print_hex(config);
     console_print("\n");
 
-    config &= ~( (1 << 0) | (1 << 1) | (1 << 6) );
+    config &= ~( (1 << 0) | (1 << 1) );
+    config |= (1 << 6); // Enable translation (Set 2 -> Set 1)
     ps2_wait_write();
     outb(PS2_STATUS_PORT, 0x60);
     ps2_wait_write();

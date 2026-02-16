@@ -9,28 +9,52 @@ static int head = 0;
 static int tail = 0;
 
 // Modifier states
-static uint8 ps2_modifiers = 0;
+static uint8 ps2_modifiers = 0; // Bit 0: Shift
 static uint8 usb_modifiers = 0;
 
 // Device Status Table
 static input_device_status_t device_statuses[INPUT_SRC_MAX];
 
-// PS/2 Scancode Table (Set 1)
-static const char ps2_map[] = {
-    0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
-    '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
-    0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,
-    '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*',
-    0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+// PS/2 Set 1 US layout (received via translation)
+static const char ps2_us_map[128] = {
+    0,   27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b',  // 0x00 - 0x0E
+    '\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',       // 0x0F - 0x1C
+    0,    'a','s','d','f','g','h','j','k','l',';','\'','`', 0,       // 0x1D - 0x2A
+    '\\','z','x','c','v','b','n','m',',','.','/', 0,                 // 0x2B - 0x36
+    '*', 0,  ' ', 0,0,0,0,0,0,0,0,0,0,0,0,0,                           // 0x37 - 0x46
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,                                   // 0x47 - 0x56
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,                                   // 0x57 - 0x66
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0                                    // 0x67 - 0x76
 };
 
-static const char ps2_map_shift[] = {
-    0,  27, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '\b',
-    '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n',
-    0, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0,
-    '|', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0, '*',
-    0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
+// Shift mapping function provided by user
+static char shift_map(char c) {
+    switch(c) {
+        case '1': return '!';
+        case '2': return '@';
+        case '3': return '#';
+        case '4': return '$';
+        case '5': return '%';
+        case '6': return '^';
+        case '7': return '&';
+        case '8': return '*';
+        case '9': return '(';
+        case '0': return ')';
+        case '-': return '_';
+        case '=': return '+';
+        case '[': return '{';
+        case ']': return '}';
+        case '\\': return '|';
+        case ';': return ':';
+        case '\'': return '"';
+        case ',': return '<';
+        case '.': return '>';
+        case '/': return '?';
+        default:
+            if(c >= 'a' && c <= 'z') return c - 32; // uppercase
+            return c;
+    }
+}
 
 // USB HID Keyboard Usage ID Table
 static const char hid_map[256] = {
@@ -85,11 +109,17 @@ void input_map_push(input_source_t source, uint32 raw_code, uint8 modifiers) {
         c = (char)(raw_code & 0xFF);
     }
     else if (source == INPUT_SRC_PS2) {
+        // PS/2 Set 1 Shift scancodes (due to translation)
+        // Press: 0x2A (LShift), 0x36 (RShift)
+        // Release: 0xAA, 0xB6
         if (raw_code == 0x2A || raw_code == 0x36) ps2_modifiers |= 0x01;
         else if (raw_code == 0xAA || raw_code == 0xB6) ps2_modifiers &= ~0x01;
 
         if (raw_code < 0x80) {
-            c = (ps2_modifiers & 0x01) ? ps2_map_shift[raw_code] : ps2_map[raw_code];
+            c = ps2_us_map[raw_code];
+            if (c && (ps2_modifiers & 0x01)) {
+                c = shift_map(c);
+            }
         }
     }
     else if (source == INPUT_SRC_USB_HID) {
