@@ -75,3 +75,11 @@ INTN fdelete(const char* path) {
     if (global_table) return global_table->fdelete(path);
     return -1;
 }
+
+void addpart(uint64 start, uint32 count) {
+    if (global_table) global_table->addpart(start, count);
+}
+
+void mkfat(int idx) {
+    if (global_table) global_table->mkfat(idx);
+}

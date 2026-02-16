@@ -1,6 +1,7 @@
 #include "diskman.h"
 #include "console.h"
 #include "../fs/rnafs.h"
+#include "../fs/fat.h"
 
 typedef struct {
     uint64 start_lba;
@@ -34,5 +35,34 @@ void diskman_mount() {
 }
 
 void diskman_ls() {
+    console_print("--- Disk Inventory ---\n");
+    for (int i = 0; i < partition_count; i++) {
+        console_print("Partition ");
+        // Simplified index print
+        char buf[2]; buf[0] = '0' + i; buf[1] = 0;
+        console_print(buf);
+        console_print(": ");
+        if (partitions[i].type == 1) console_print("RNAFS");
+        else if (partitions[i].type == 2) console_print("FAT16");
+        else console_print("UNKNOWN");
+        console_print("\n");
+    }
     rnafs_ls();
+}
+
+void diskman_add_partition(uint64 start_lba, uint32 sector_count) {
+    if (partition_count < MAX_PARTITIONS) {
+        partitions[partition_count].start_lba = start_lba;
+        partitions[partition_count].sector_count = sector_count;
+        partitions[partition_count].type = 0; // unknown
+        partition_count++;
+        console_print("New partition added.\n");
+    }
+}
+
+void diskman_format_fat(int idx) {
+    if (idx >= 0 && idx < partition_count) {
+        mkfs_fat16(partitions[idx].start_lba, partitions[idx].sector_count);
+        partitions[idx].type = 2; // FAT16
+    }
 }

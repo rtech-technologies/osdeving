@@ -22,6 +22,8 @@ void mount();
 void lsfs();
 INTN fwrite_sized(const char* path, const void* buffer, UINTN size);
 INTN fdelete(const char* path);
+void addpart(uint64 start, uint32 count);
+void mkfat(int idx);
 
 // Syscall Table Structure
 typedef struct {
@@ -42,6 +44,8 @@ typedef struct {
     void (*lsfs)();
     INTN (*fwrite_sized)(const char*, const void*, UINTN);
     INTN (*fdelete)(const char*);
+    void (*addpart)(uint64, uint32);
+    void (*mkfat)(int);
 } syscall_table_t;
 
 #endif

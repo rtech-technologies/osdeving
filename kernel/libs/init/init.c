@@ -40,6 +40,8 @@ void init(boot_params_t* params) {
     ksyscalls.lsfs = diskman_ls;
     ksyscalls.fwrite_sized = fs_write_sized;
     ksyscalls.fdelete = fs_delete;
+    ksyscalls.addpart = diskman_add_partition;
+    ksyscalls.mkfat = diskman_format_fat;
 
     // 4. System Initialization Event
     trigger(EVENT_INIT);
