@@ -83,3 +83,11 @@ void addpart(uint64 start, uint32 count) {
 void mkfat(int idx) {
     if (global_table) global_table->mkfat(idx);
 }
+
+void reboot() {
+    if (global_table) global_table->reboot();
+}
+
+void shutdown() {
+    if (global_table) global_table->shutdown();
+}

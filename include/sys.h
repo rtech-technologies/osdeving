@@ -10,6 +10,7 @@
 #include "../kernel/libs/memory/memory.h"
 #include "../kernel/libs/disk/disk.h"
 #include "../kernel/libs/disk/diskman.h"
+#include "../kernel/libs/power/power.h"
 #include "../kernel/libs/fs/fs.h"
 #include "../kernel/libs/event/event.h"
 #include "../kernel/libs/init/init.h"

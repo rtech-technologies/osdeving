@@ -11,6 +11,9 @@ void init(boot_params_t* params) {
     register_service(memory_init);
     register_service(disk_init);
     register_service(diskman_init);
+#ifdef CONFIG_POWER_SERVICES
+    register_service(power_init);
+#endif
     register_service(fs_init);
 #ifdef CONFIG_USB_SUPPORT
     register_service(xhci_init);
@@ -42,6 +45,10 @@ void init(boot_params_t* params) {
     ksyscalls.fdelete = fs_delete;
     ksyscalls.addpart = diskman_add_partition;
     ksyscalls.mkfat = diskman_format_fat;
+#ifdef CONFIG_POWER_SERVICES
+    ksyscalls.reboot = reboot_prompt;
+    ksyscalls.shutdown = shutdown_prompt;
+#endif
 
     // 4. System Initialization Event
     trigger(EVENT_INIT);

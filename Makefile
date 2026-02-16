@@ -1,3 +1,7 @@
+# OSx2 (RTECH dos) Makefile
+# -------------------------
+
+# 1. Architecture & Toolchain
 ARCH            = x86_64
 EFIINC          = /usr/include/efi
 EFIINCS         = -I$(EFIINC) -I$(EFIINC)/$(ARCH) -I$(EFIINC)/protocol
@@ -6,6 +10,7 @@ EFILIB          = /usr/lib
 EFI_CRT_OBJS    = $(EFILIB)/crt0-efi-$(ARCH).o
 EFI_LDS         = $(EFILIB)/elf_$(ARCH)_efi.lds
 
+# 2. Compiler Flags
 CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
 		  -DEFI_FUNCTION_WRAPPER -fno-builtin -ffreestanding \
 		  -Iinclude \
@@ -20,62 +25,94 @@ CFLAGS          = $(EFIINCS) -fpic -fshort-wchar -mno-red-zone -Wall \
 		  -Ikernel/libs/pci \
 		  -Ikernel/libs/devman \
 		  -Ikernel/libs/usb_keyboard \
+		  -Ikernel/libs/power \
 		  -Ikernel/libs/stup \
 		  -Ikernel/unice64
 
 LDFLAGS         = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
 		  -Bsymbolic -L $(EFILIB) -L $(LIB) $(EFI_CRT_OBJS)
 
+# 3. Load Configuration
+-include .config
+CONFIG_MEMORY_MB ?= 512
+
+# 4. Source Definitions (Sectioned)
+
+# Core Kernel
 KERNEL_SRCS = kernel/unice64/main.c \
               kernel/unice64/core.c \
               kernel/libs/init/init.c \
-              kernel/libs/console/console.c \
-              kernel/libs/console/font_data.c \
-              kernel/libs/memory/memory.c \
-              kernel/libs/disk/disk.c \
-              kernel/libs/disk/diskman.c \
-              kernel/libs/fs/fs.c \
-              kernel/libs/fs/rnafs.c \
-              kernel/libs/fs/fat.c \
               kernel/libs/event/event.c \
-              kernel/libs/input/input_map.c \
-              kernel/libs/xhci/xhci.c \
-              kernel/libs/pci/pci.c \
-              kernel/libs/devman/devman.c \
-              kernel/libs/usb_keyboard/usb_keyboard.c \
               kernel/libs/stup/stup.c
+
+# Core Services
+KERNEL_SRCS += kernel/libs/console/console.c \
+               kernel/libs/console/font_data.c \
+               kernel/libs/memory/memory.c \
+               kernel/libs/input/input_map.c
+
+# Storage Subsystem
+KERNEL_SRCS += kernel/libs/disk/disk.c \
+               kernel/libs/disk/diskman.c \
+               kernel/libs/fs/fs.c
+
+# Hardware Support (Conditional)
+ifeq ($(CONFIG_PCI_ENUM),y)
+KERNEL_SRCS += kernel/libs/pci/pci.c
+endif
+
+ifeq ($(CONFIG_USB_SUPPORT),y)
+KERNEL_SRCS += kernel/libs/xhci/xhci.c \
+               kernel/libs/usb_keyboard/usb_keyboard.c
+endif
+
+ifeq ($(CONFIG_RNAFS),y)
+KERNEL_SRCS += kernel/libs/fs/rnafs.c
+endif
+
+ifeq ($(CONFIG_FAT16),y)
+KERNEL_SRCS += kernel/libs/fs/fat.c
+endif
+
+ifeq ($(CONFIG_POWER_SERVICES),y)
+KERNEL_SRCS += kernel/libs/power/power.c
+endif
+
+# Diagnostics
+KERNEL_SRCS += kernel/libs/devman/devman.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
+# 5. Build Artifacts
 KERNEL_EFI = BOOTX64.EFI
 OVMF_FD = /usr/share/ovmf/OVMF.fd
 BOOT_IMG = boot.img
 BOOT_ISO = boot.iso
 
-# Load configuration if it exists
--include .config
-
-# Default values if not set in .config
-CONFIG_MEMORY_MB ?= 512
-
-# QEMU Run Configuration
+# 6. QEMU Run Configuration
 QEMU_BASE_FLAGS = -m $(CONFIG_MEMORY_MB)M -net none -machine pc
 QEMU_DEVICES = -device qemu-xhci -device usb-kbd -device usb-mouse -device usb-tablet
 
+# 7. Targets
 .PHONY: all clean run run-serial setup compile make vga_test update menuconfig
 
 all: include/config.h $(KERNEL_EFI) shell.bin $(BOOT_IMG) $(BOOT_ISO)
 
 make: all
-
 compile: all
 
 setup:
 	sudo apt-get update && sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf dosfstools mtools xorriso
-	mkdir -p boot kernel/libs kernel/unice64 include programs
+	mkdir -p boot kernel/libs kernel/unice64 include programs scripts
 	@if [ ! -f boot/linker.ld ]; then \
 		echo "SECTIONS { . = 0x0; .text : { *(.text) } .rodata : { *(.rodata) } .data : { *(.data) } .bss : { *(.bss) } }" > boot/linker.ld; \
 	fi
+
+menuconfig:
+	python3 scripts/menuconfig.py
+
+include/config.h:
+	python3 scripts/menuconfig.py --default
 
 $(KERNEL_EFI): kernel.so
 	objcopy -j .text -j .sdata -j .data -j .dynamic \
@@ -133,6 +170,7 @@ clean:
 	      kernel/libs/console/*.o \
 	      kernel/libs/memory/*.o \
 	      kernel/libs/disk/*.o \
+	      kernel/libs/disk/diskman.o \
 	      kernel/libs/fs/*.o \
 	      kernel/libs/event/*.o \
 	      kernel/libs/init/*.o \
@@ -140,7 +178,8 @@ clean:
 	      kernel/libs/xhci/*.o \
 	      kernel/libs/pci/*.o \
 	      kernel/libs/devman/*.o \
-      kernel/libs/usb_keyboard/*.o \
+	      kernel/libs/usb_keyboard/*.o \
+	      kernel/libs/power/*.o \
 	      kernel/libs/stup/*.o \
 	      programs/*.o shell.elf shell.bin
 	rm -f $(BOOT_IMG) $(BOOT_ISO)
@@ -150,9 +189,3 @@ update: clean
 	mkdir -p ~/Downloads
 	cp -r . ~/Downloads/osx2_repo
 	rm -rf $(CURDIR)
-
-menuconfig:
-	python3 scripts/menuconfig.py
-
-include/config.h:
-	python3 scripts/menuconfig.py --default # I should add a default mode to the script

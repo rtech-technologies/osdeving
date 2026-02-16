@@ -26,7 +26,7 @@ int program_main() {
             exit();
             return 0;
         } else if (strcmp(buffer, "help") == 0) {
-            print("Commands: devman, lsdev, format, mount, lsfs, testfs, del, addpart, mkfat, help, exit\n");
+            print("Commands: devman, lsdev, format, mount, lsfs, testfs, del, addpart, mkfat, reboot, shutdown, help, exit\n");
         } else if (strcmp(buffer, "format") == 0) {
             format();
         } else if (strcmp(buffer, "mount") == 0) {
@@ -65,6 +65,10 @@ int program_main() {
             char s_idx[8];
             input("partition index: ", s_idx, 8);
             mkfat(atoi(s_idx));
+        } else if (strcmp(buffer, "reboot") == 0) {
+            reboot();
+        } else if (strcmp(buffer, "shutdown") == 0) {
+            shutdown();
         } else if (strcmp(buffer, "lsdev") == 0) {
             lsdev();
         } else if (strcmp(buffer, "devman") == 0) {
