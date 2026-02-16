@@ -9,4 +9,7 @@ void shutdown();
 void reboot_prompt();
 void shutdown_prompt();
 
+void shell_shutdown();
+void shell_reboot();
+
 #endif

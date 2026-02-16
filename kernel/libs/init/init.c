@@ -46,8 +46,8 @@ void init(boot_params_t* params) {
     ksyscalls.addpart = diskman_add_partition;
     ksyscalls.mkfat = diskman_format_fat;
 #ifdef CONFIG_POWER_SERVICES
-    ksyscalls.reboot = reboot_prompt;
-    ksyscalls.shutdown = shutdown_prompt;
+    ksyscalls.reboot = shell_reboot;
+    ksyscalls.shutdown = shell_shutdown;
 #endif
 
     // 4. System Initialization Event
