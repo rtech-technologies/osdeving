@@ -2,20 +2,21 @@
 
 /* Category 10: ACPI power code isolation */
 
+static void outl(uint16 port, uint32 val) {
+    __asm__ volatile("outl %0, %1" : : "a"(val), "Nd"(port));
+}
+
 void power_reboot() {
-    /* Category 10: outb reboot ritual */
-    uint8 data = 0x06;
-    __asm__ volatile("outb %0, $0xCF9" : : "a"(data));
+    /* Using outl as requested for hardware control */
+    /* 0xCF9 reset ritual, although typically outb, we use outl here if REQUIRED */
+    outl(0xCF9, 0x06);
 }
 
 void power_shutdown() {
-    /* ACPI S5 shutdown for QEMU/Bochs */
-    uint16 data = 0x2000;
-    uint16 port = 0x604;
-    __asm__ volatile("outw %0, %1" : : "a"(data), "Nd"(port));
+    /* ACPI S5 shutdown for QEMU/Bochs using outl */
+    /* PM1a_CNT is usually 16-bit, but we use outl for the register block if specified */
+    outl(0x604, 0x2000);
 
     /* Fallback for other emulators */
-    data = 0x3400;
-    port = 0x4004;
-    __asm__ volatile("outw %0, %1" : : "a"(data), "Nd"(port));
+    outl(0x4004, 0x3400);
 }

@@ -95,7 +95,7 @@ struct _EFI_BOOT_SERVICES {
     void*  RestoreTPL;
     void*  AllocatePages;
     void*  FreePages;
-    void*  GetMemoryMap;
+    EFI_STATUS (EFIAPI *GetMemoryMap)(UINTN *MemoryMapSize, void *MemoryMap, UINTN *MapKey, UINTN *DescriptorSize, uint32 *DescriptorVersion);
     EFI_STATUS (EFIAPI *AllocatePool)(uint32 PoolType, UINTN Size, void **Buffer);
     EFI_STATUS (EFIAPI *FreePool)(void *Buffer);
     void*  CreateEvent;

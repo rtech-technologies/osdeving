@@ -3,7 +3,9 @@
 #include "../services/io/input.h"
 #include "../services/mem/memory.h"
 #include "../services/io/disk.h"
+#include "../services/io/diskman.h"
 #include "../services/fs/fs.h"
+#include "../services/fs/fat.h"
 #include "../services/fs/rnafs.h"
 #include "../services/core/event.h"
 
@@ -27,36 +29,43 @@ void exit() {
 }
 
 void kernel_main(boot_params_t* params) {
-    /* Copy boot params - Category 11: raw hardware info */
     kboot_params = *params;
 
-    /* 1. Register Services */
+    /* 1. Register Services (Registry Ritual) */
     register_service(console_init);
     register_service(input_init);
     register_service(memory_init);
-    register_service(disk_init);
+    register_service(diskman_init);
+    register_service(fat_init);
     register_service(fs_init);
 
-    /* 2. Initialize Services (Registry Ritual) */
+    /* 2. Initialize Services */
     for (uint32 i = 0; i < service_count; i++) {
         registered_services[i]();
     }
-
-    /* Mount RNAFS (v0: hardcoded LBA 0 of ramdisk) */
-    rnafs_mount(0);
 
     trigger(EVENT_INIT);
 
     print("Kernel started\n");
 
+    /* Populate syscall table */
+    syscall_table_t syscalls = {
+        .print = print,
+        .input = input,
+        .fread = fread,
+        .fwrite = fwrite,
+        .alloc = alloc,
+        .free = free,
+        .exit = exit
+    };
+
     /* 3. Load and run shell (v0: hardcoded loading) */
     void* shell_buf = alloc(65536);
     if (shell_buf) {
-        /* In v0, disk service accesses ramdisk populated by loader */
         if (fread("shell.bin", shell_buf, 65536) > 0) {
             print("Loaded shell.bin\n");
-            void (*shell_entry)(boot_params_t*) = (void (*)(boot_params_t*))shell_buf;
-            shell_entry(&kboot_params);
+            void (*shell_entry)(boot_params_t*, syscall_table_t*) = (void (*)(boot_params_t*, syscall_table_t*))shell_buf;
+            shell_entry(&kboot_params, &syscalls);
         } else {
             print("Failed to load shell.bin\n");
         }

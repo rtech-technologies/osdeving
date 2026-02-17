@@ -41,20 +41,81 @@ static const char scancode_map[128] = {
     0,	/* All other keys are undefined */
 };
 
+static void outb(uint16 port, uint8 val) {
+    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static uint8 inb(uint16 port) {
+    uint8 ret;
+    __asm__ volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static void wait_input() {
+    while (inb(0x64) & 0x02);
+}
+
+static void wait_output() {
+    while (!(inb(0x64) & 0x01));
+}
+
 void input_init() {
-    /* PS/2 keyboard init could go here if needed */
+    /* PS/2 Controller Initialization */
+
+    /* 1. Disable devices */
+    wait_input();
+    outb(0x64, 0xAD); /* Disable P1 */
+    wait_input();
+    outb(0x64, 0xA7); /* Disable P2 */
+
+    /* 2. Flush output buffer */
+    while (inb(0x64) & 0x01) inb(0x60);
+
+    /* 3. Set Controller Configuration Byte */
+    wait_input();
+    outb(0x64, 0x20); /* Read CCB */
+    wait_output();
+    uint8 ccb = inb(0x60);
+    ccb |= 0x01; /* Enable Port 1 interrupt (optional for polling but good practice) */
+    ccb &= ~0x10; /* Clear Port 1 clock disable */
+    wait_input();
+    outb(0x64, 0x60); /* Write CCB */
+    wait_input();
+    outb(0x60, ccb);
+
+    /* 4. Controller Self-Test */
+    wait_input();
+    outb(0x64, 0xAA);
+    wait_output();
+    if (inb(0x60) != 0x55) {
+        print("PS/2: Controller self-test failed\n");
+    }
+
+    /* 5. Enable devices */
+    wait_input();
+    outb(0x64, 0xAE); /* Enable P1 */
+
+    /* 6. Reset Keyboard & Enable Scanning */
+    wait_input();
+    outb(0x60, 0xFF); /* Reset */
+    wait_output();
+    inb(0x60); /* ACK/PASS */
+
+    wait_input();
+    outb(0x60, 0xF4); /* Enable Scanning - MANDATORY */
+    wait_output();
+    inb(0x60); /* ACK */
 }
 
 char read_key() {
     uint8 status;
     uint8 scancode;
 
-    /* Poll for data */
     while (1) {
-        __asm__ volatile("inb $0x64, %0" : "=a"(status));
+        status = inb(0x64);
         if (status & 0x01) {
-            __asm__ volatile("inb $0x60, %0" : "=a"(scancode));
-            if (!(scancode & 0x80)) {
+            scancode = inb(0x60);
+            if (!(scancode & 0x80) && scancode < 128) {
                 return scancode_map[scancode];
             }
         }
@@ -73,7 +134,6 @@ void input(const char* prompt, char* buffer, uint64 size) {
         } else if (c == '\b') {
             if (i > 0) {
                 i--;
-                /* Visual backspace */
                 print("\b \b");
             }
         } else if (c >= 32 && c <= 126) {

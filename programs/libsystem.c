@@ -2,16 +2,43 @@
 #include "../kernel/kernel.h"
 
 boot_params_t kboot_params;
-static int exit_requested = 0;
+static syscall_table_t* g_syscalls = NULL;
 
 int program_main();
 
-void exit() {
-    exit_requested = 1;
+void print(const char* str) {
+    if (g_syscalls && g_syscalls->print) g_syscalls->print(str);
 }
 
-void _start(boot_params_t* params) {
+void input(const char* prompt, char* buffer, uint64 size) {
+    if (g_syscalls && g_syscalls->input) g_syscalls->input(prompt, buffer, size);
+}
+
+INTN fread(const char* path, void* buffer, uint64 max_size) {
+    if (g_syscalls && g_syscalls->fread) return g_syscalls->fread(path, buffer, max_size);
+    return -1;
+}
+
+INTN fwrite(const char* path, const void* buffer, uint64 size) {
+    if (g_syscalls && g_syscalls->fwrite) return g_syscalls->fwrite(path, buffer, size);
+    return -1;
+}
+
+void* alloc(uint64 size) {
+    if (g_syscalls && g_syscalls->alloc) return g_syscalls->alloc(size);
+    return NULL;
+}
+
+void free(void* ptr) {
+    if (g_syscalls && g_syscalls->free) g_syscalls->free(ptr);
+}
+
+void exit() {
+    if (g_syscalls && g_syscalls->exit) g_syscalls->exit();
+}
+
+void _start(boot_params_t* params, syscall_table_t* syscalls) {
     if (params) kboot_params = *params;
-    exit_requested = 0;
+    if (syscalls) g_syscalls = syscalls;
     program_main();
 }

@@ -12,4 +12,15 @@ void* alloc(uint64 size);
 void free(void* ptr);
 void exit();
 
+/* Category: Syscall Table */
+typedef struct {
+    void (*print)(const char*);
+    void (*input)(const char*, char*, uint64);
+    INTN (*fread)(const char*, void*, uint64);
+    INTN (*fwrite)(const char*, const void*, uint64);
+    void* (*alloc)(uint64);
+    void (*free)(void*);
+    void (*exit)();
+} syscall_table_t;
+
 #endif
