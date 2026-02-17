@@ -7,9 +7,17 @@
 typedef char static_assertion_sizeof_Superblock[(sizeof(Superblock) == 44) ? 1 : -1];
 typedef char static_assertion_sizeof_DirEntry[(sizeof(DirEntry) == 64) ? 1 : -1];
 
+#define MAX_BITMAP_BLOCKS 1
+#define MAX_DIR_BLOCKS    4
+#define ENTRIES_PER_BLOCK (FS_BLOCK_SIZE / sizeof(DirEntry))
+
 static uint64 current_partition_lba = 0;
 static Superblock mounted_sb;
 static int rnafs_ready = 0;
+
+/* Fixed buffers for metadata - No dynamic allocation after mount */
+static uint8 rnafs_bitmap[MAX_BITMAP_BLOCKS * FS_BLOCK_SIZE];
+static DirEntry rnafs_dir_table[MAX_DIR_BLOCKS * ENTRIES_PER_BLOCK];
 
 #ifdef FS_DISABLED
 #define IS_FS_DISABLED 1
@@ -49,7 +57,7 @@ static void strncpy(char* dst, const char* src, uint64 n) {
     for (; i < n; i++) dst[i] = 0;
 }
 
-/* Category 5: block -> sector conversion */
+/* Block I/O */
 static void read_block(uint32 block_idx, void* buffer) {
     uint64 lba = current_partition_lba + ((uint64)block_idx * SECTORS_PER_BLOCK);
     read_sectors(lba, SECTORS_PER_BLOCK, buffer);
@@ -73,8 +81,19 @@ int rnafs_mount(uint64 partition_start_lba) {
     memcpy(&mounted_sb, buffer, sizeof(Superblock));
 
     if (memcmp(mounted_sb.magic, "RNAFS1", 6) != 0) {
-        /* User requested: do NOT format on boot */
         return 0;
+    }
+
+    /* Load bitmap into fixed buffer */
+    uint32 b_blocks = (mounted_sb.bitmap_block_count > MAX_BITMAP_BLOCKS) ? MAX_BITMAP_BLOCKS : mounted_sb.bitmap_block_count;
+    for (uint32 i = 0; i < b_blocks; i++) {
+        read_block(mounted_sb.bitmap_start_block + i, rnafs_bitmap + (i * FS_BLOCK_SIZE));
+    }
+
+    /* Load directory table into fixed buffer */
+    uint32 d_blocks = (mounted_sb.dir_block_count > MAX_DIR_BLOCKS) ? MAX_DIR_BLOCKS : mounted_sb.dir_block_count;
+    for (uint32 i = 0; i < d_blocks; i++) {
+        read_block(mounted_sb.dir_start_block + i, (uint8*)rnafs_dir_table + (i * FS_BLOCK_SIZE));
     }
 
     rnafs_ready = 1;
@@ -84,16 +103,10 @@ int rnafs_mount(uint64 partition_start_lba) {
 int rnafs_read_file(const char* name, void* buffer, uint32 max_bytes) {
     if (!rnafs_ready || IS_FS_DISABLED) return -1;
 
-    uint32 dir_block_idx = mounted_sb.dir_start_block;
-    DirEntry* entries = (DirEntry*)alloc(mounted_sb.dir_block_count * FS_BLOCK_SIZE);
-    for (uint32 i = 0; i < mounted_sb.dir_block_count; i++) {
-        read_block(dir_block_idx + i, (uint8*)entries + (i * FS_BLOCK_SIZE));
-    }
-
-    uint32 entry_count = (mounted_sb.dir_block_count * FS_BLOCK_SIZE) / sizeof(DirEntry);
+    uint32 entry_count = MAX_DIR_BLOCKS * ENTRIES_PER_BLOCK;
     int found_idx = -1;
     for (uint32 i = 0; i < entry_count; i++) {
-        if (entries[i].type == 1 && strcmp(entries[i].name, name) == 0) {
+        if (rnafs_dir_table[i].type == 1 && strcmp(rnafs_dir_table[i].name, name) == 0) {
             found_idx = i;
             break;
         }
@@ -101,7 +114,7 @@ int rnafs_read_file(const char* name, void* buffer, uint32 max_bytes) {
 
     if (found_idx == -1) return -1;
 
-    DirEntry* e = &entries[found_idx];
+    DirEntry* e = &rnafs_dir_table[found_idx];
     uint32 to_read = (e->size_bytes < max_bytes) ? e->size_bytes : max_bytes;
 
     uint32 start_block = e->first_block;
@@ -122,17 +135,10 @@ int rnafs_read_file(const char* name, void* buffer, uint32 max_bytes) {
 int rnafs_create_file(uint32 parent, const char* name, uint32 size_bytes) {
     if (!rnafs_ready || IS_FS_DISABLED) return 0;
 
-    uint32 dir_block_idx = mounted_sb.dir_start_block;
-    DirEntry* entries = (DirEntry*)alloc(mounted_sb.dir_block_count * FS_BLOCK_SIZE);
-
-    for (uint32 i = 0; i < mounted_sb.dir_block_count; i++) {
-        read_block(dir_block_idx + i, (uint8*)entries + (i * FS_BLOCK_SIZE));
-    }
-
-    uint32 entry_count = (mounted_sb.dir_block_count * FS_BLOCK_SIZE) / sizeof(DirEntry);
+    uint32 entry_count = MAX_DIR_BLOCKS * ENTRIES_PER_BLOCK;
     int free_idx = -1;
     for (uint32 i = 0; i < entry_count; i++) {
-        if (entries[i].type == 0) {
+        if (rnafs_dir_table[i].type == 0) {
             free_idx = i;
             break;
         }
@@ -140,18 +146,13 @@ int rnafs_create_file(uint32 parent, const char* name, uint32 size_bytes) {
 
     if (free_idx == -1) return 0;
 
-    /* Allocation logic: find next free block using bitmap */
-    uint8* bitmap = (uint8*)alloc(mounted_sb.bitmap_block_count * FS_BLOCK_SIZE);
-    for (uint32 i = 0; i < mounted_sb.bitmap_block_count; i++) {
-        read_block(mounted_sb.bitmap_start_block + i, bitmap + (i * FS_BLOCK_SIZE));
-    }
-
     uint32 blocks_needed = (size_bytes + FS_BLOCK_SIZE - 1) / FS_BLOCK_SIZE;
     uint32 found_start = 0;
     uint32 count = 0;
+    uint32 total_bits = mounted_sb.total_blocks;
 
-    for (uint32 i = mounted_sb.data_start_block; i < mounted_sb.total_blocks; i++) {
-        if (!(bitmap[i / 8] & (1 << (i % 8)))) {
+    for (uint32 i = mounted_sb.data_start_block; i < total_bits; i++) {
+        if (!(rnafs_bitmap[i / 8] & (1 << (i % 8)))) {
             if (count == 0) found_start = i;
             count++;
             if (count == blocks_needed) break;
@@ -162,15 +163,17 @@ int rnafs_create_file(uint32 parent, const char* name, uint32 size_bytes) {
 
     if (count < blocks_needed) return 0;
 
+    /* Mark blocks as used in bitmap */
     for (uint32 i = found_start; i < found_start + blocks_needed; i++) {
-        bitmap[i / 8] |= (1 << (i % 8));
+        rnafs_bitmap[i / 8] |= (1 << (i % 8));
     }
 
-    for (uint32 i = 0; i < mounted_sb.bitmap_block_count; i++) {
-        write_block(mounted_sb.bitmap_start_block + i, bitmap + (i * FS_BLOCK_SIZE));
+    /* Write bitmap blocks back to disk */
+    for (uint32 i = 0; i < mounted_sb.bitmap_block_count && i < MAX_BITMAP_BLOCKS; i++) {
+        write_block(mounted_sb.bitmap_start_block + i, rnafs_bitmap + (i * FS_BLOCK_SIZE));
     }
 
-    DirEntry* e = &entries[free_idx];
+    DirEntry* e = &rnafs_dir_table[free_idx];
     memset(e, 0, sizeof(DirEntry));
     strncpy(e->name, name, 31);
     e->type = 1;
@@ -179,8 +182,9 @@ int rnafs_create_file(uint32 parent, const char* name, uint32 size_bytes) {
     e->first_block = found_start;
     e->block_count = blocks_needed;
 
-    uint32 block_to_write = dir_block_idx + (free_idx * sizeof(DirEntry)) / FS_BLOCK_SIZE;
-    write_block(block_to_write, (uint8*)entries + (block_to_write - dir_block_idx) * FS_BLOCK_SIZE);
+    /* Write back the directory block containing this entry */
+    uint32 block_in_table = free_idx / ENTRIES_PER_BLOCK;
+    write_block(mounted_sb.dir_start_block + block_in_table, (uint8*)rnafs_dir_table + (block_in_table * FS_BLOCK_SIZE));
 
     return 1;
 }
@@ -188,16 +192,10 @@ int rnafs_create_file(uint32 parent, const char* name, uint32 size_bytes) {
 int rnafs_write_file(const char* name, const void* buffer, uint32 size_bytes) {
     if (!rnafs_ready || IS_FS_DISABLED) return 0;
 
-    uint32 dir_block_idx = mounted_sb.dir_start_block;
-    DirEntry* entries = (DirEntry*)alloc(mounted_sb.dir_block_count * FS_BLOCK_SIZE);
-    for (uint32 i = 0; i < mounted_sb.dir_block_count; i++) {
-        read_block(dir_block_idx + i, (uint8*)entries + (i * FS_BLOCK_SIZE));
-    }
-
-    uint32 entry_count = (mounted_sb.dir_block_count * FS_BLOCK_SIZE) / sizeof(DirEntry);
+    uint32 entry_count = MAX_DIR_BLOCKS * ENTRIES_PER_BLOCK;
     int found_idx = -1;
     for (uint32 i = 0; i < entry_count; i++) {
-        if (entries[i].type == 1 && strcmp(entries[i].name, name) == 0) {
+        if (rnafs_dir_table[i].type == 1 && strcmp(rnafs_dir_table[i].name, name) == 0) {
             found_idx = i;
             break;
         }
@@ -205,7 +203,7 @@ int rnafs_write_file(const char* name, const void* buffer, uint32 size_bytes) {
 
     if (found_idx == -1) return 0;
 
-    DirEntry* e = &entries[found_idx];
+    DirEntry* e = &rnafs_dir_table[found_idx];
     uint32 required_blocks = (size_bytes + FS_BLOCK_SIZE - 1) / FS_BLOCK_SIZE;
     if (required_blocks > e->block_count) return 0;
 
@@ -221,8 +219,8 @@ int rnafs_write_file(const char* name, const void* buffer, uint32 size_bytes) {
     }
 
     e->size_bytes = size_bytes;
-    uint32 block_to_write = dir_block_idx + (found_idx * sizeof(DirEntry)) / FS_BLOCK_SIZE;
-    write_block(block_to_write, (uint8*)entries + (block_to_write - dir_block_idx) * FS_BLOCK_SIZE);
+    uint32 block_in_table = found_idx / ENTRIES_PER_BLOCK;
+    write_block(mounted_sb.dir_start_block + block_in_table, (uint8*)rnafs_dir_table + (block_in_table * FS_BLOCK_SIZE));
 
     return 1;
 }

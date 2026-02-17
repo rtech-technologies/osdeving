@@ -4,6 +4,7 @@
 static EFI_GUID gop_g = {0x70482061, 0x0512, 0x476A, {0xBC, 0xC3, 0x04, 0x54, 0x8F, 0x9E, 0x22, 0x07}};
 static EFI_GUID li_g = {0x5B1B31A1, 0x9562, 0x11D2, {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
 static EFI_GUID fs_g = {0x0964E5B2, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
+static EFI_GUID info_g = {0x0964e5b2, 0x6459, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}}; /* EFI_FILE_INFO_ID */
 
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     boot_params_t params = {0};
@@ -26,7 +27,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         if (SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs) == EFI_SUCCESS) {
             if (fs->OpenVolume(fs, &root) == EFI_SUCCESS) {
                 if (root->Open(root, &file, L"shell.bin", 1, 0) == EFI_SUCCESS) {
-                    UINTN size = 128 * 1024; /* Assume shell.bin fits in 128KB */
+                    /* Get file size */
+                    uint8 info_buffer[256];
+                    UINTN info_size = sizeof(info_buffer);
+                    uint64 file_size = 65536; /* Fallback */
+
+                    if (file->GetInfo(file, &info_g, &info_size, info_buffer) == EFI_SUCCESS) {
+                        EFI_FILE_INFO* info = (EFI_FILE_INFO*)info_buffer;
+                        file_size = info->FileSize;
+                    }
+
+                    UINTN size = (UINTN)file_size;
                     void* buffer;
                     if (SystemTable->BootServices->AllocatePool(2, size, &buffer) == EFI_SUCCESS) {
                         if (file->Read(file, &size, buffer) == EFI_SUCCESS) {
@@ -48,12 +59,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     uint32 descriptor_version = 0;
     void* map = NULL;
 
-    /* First call to get size */
     SystemTable->BootServices->GetMemoryMap(&map_size, map, &map_key, &descriptor_size, &descriptor_version);
-    map_size += 2 * descriptor_size; /* Add some buffer */
+    map_size += 2 * descriptor_size;
     SystemTable->BootServices->AllocatePool(2, map_size, &map);
 
-    /* Second call to get actual map */
     if (SystemTable->BootServices->GetMemoryMap(&map_size, map, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
         if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
             /* 4. Hand off to Kernel */
@@ -61,7 +70,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
-    /* If we failed to exit boot services or kernel returns, hang */
     while(1) { __asm__ volatile("hlt"); }
     return EFI_SUCCESS;
 }
