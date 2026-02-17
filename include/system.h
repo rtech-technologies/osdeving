@@ -5,6 +5,7 @@
 
 /* Public API for programs - Category 12: Use custom types */
 void print(const char* str);
+void input(const char* prompt, char* buffer, uint64 size);
 INTN fread(const char* path, void* buffer, uint64 max_size);
 INTN fwrite(const char* path, const void* buffer, uint64 size);
 void* alloc(uint64 size);

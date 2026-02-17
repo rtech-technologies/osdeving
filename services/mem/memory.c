@@ -1,5 +1,5 @@
 #include "memory.h"
-#include "../include/types.h"
+#include "../../include/types.h"
 
 #define HEAP_SIZE (4 * 1024 * 1024)
 static uint8 global_heap[HEAP_SIZE];

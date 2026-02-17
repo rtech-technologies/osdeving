@@ -2,6 +2,9 @@
 #include "kernel.h"
 
 static EFI_GUID gop_g = {0x70482061, 0x0512, 0x476A, {0xBC, 0xC3, 0x04, 0x54, 0x8F, 0x9E, 0x22, 0x07}};
+static EFI_GUID li_g = {0x5B1B31A1, 0x9562, 0x11D2, {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
+static EFI_GUID fs_g = {0x0964E5B2, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
+static EFI_GUID info_g = {0x0964E5B2, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}}; /* Using same as FS for simplicity in v0 */
 
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     boot_params_t params = {0};
@@ -15,7 +18,32 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
     }
 
-    /* 2. Hand off to Kernel */
+    /* 2. Load shell.bin into Ramdisk */
+    EFI_LOADED_IMAGE_PROTOCOL *li;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
+    EFI_FILE_PROTOCOL *root, *file;
+
+    if (SystemTable->BootServices->HandleProtocol(ImageHandle, &li_g, (void**)&li) == EFI_SUCCESS) {
+        if (SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs) == EFI_SUCCESS) {
+            if (fs->OpenVolume(fs, &root) == EFI_SUCCESS) {
+                if (root->Open(root, &file, L"shell.bin", 1, 0) == EFI_SUCCESS) {
+                    /* Get file size - simplifying for v0 by using a fixed large buffer or seeking */
+                    UINTN size = 65536;
+                    void* buffer;
+                    if (SystemTable->BootServices->AllocatePool(2, size, &buffer) == EFI_SUCCESS) {
+                        if (file->Read(file, &size, buffer) == EFI_SUCCESS) {
+                            params.ramdisk_base = buffer;
+                            params.ramdisk_size = size;
+                        }
+                    }
+                    file->Close(file);
+                }
+                root->Close(root);
+            }
+        }
+    }
+
+    /* 3. Hand off to Kernel */
     kernel_main(&params);
 
     return EFI_SUCCESS;

@@ -1,10 +1,11 @@
 #include "kernel.h"
-#include "../services/console.h"
-#include "../services/memory.h"
-#include "../services/disk.h"
-#include "../services/fs.h"
-#include "../services/rnafs.h"
-#include "../services/event.h"
+#include "../services/io/console.h"
+#include "../services/io/input.h"
+#include "../services/mem/memory.h"
+#include "../services/io/disk.h"
+#include "../services/fs/fs.h"
+#include "../services/fs/rnafs.h"
+#include "../services/core/event.h"
 
 boot_params_t kboot_params;
 int running = 1;
@@ -31,6 +32,7 @@ void kernel_main(boot_params_t* params) {
 
     /* 1. Register Services */
     register_service(console_init);
+    register_service(input_init);
     register_service(memory_init);
     register_service(disk_init);
     register_service(fs_init);

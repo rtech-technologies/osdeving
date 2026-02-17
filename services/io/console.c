@@ -1,6 +1,6 @@
 #include "console.h"
 #include "font.h"
-#include "../kernel/kernel.h"
+#include "../../kernel/kernel.h"
 
 static uint32 cursor_x = 0;
 static uint32 cursor_y = 0;
@@ -40,8 +40,20 @@ void print(const char* str) {
         if (*str == '\n') {
             cursor_x = 0;
             cursor_y += 10;
+        } else if (*str == '\b') {
+            if (cursor_x >= 8) {
+                cursor_x -= 8;
+            } else if (cursor_y >= 10) {
+                cursor_y -= 10;
+                cursor_x = (kboot_params.width / 8) * 8 - 8;
+            }
+            draw_char(' ', cursor_x, cursor_y, 0x00000000);
         } else {
-            draw_char(*str, cursor_x, cursor_y, 0xFFFFFFFF);
+            if (*str == ' ') {
+                draw_char(' ', cursor_x, cursor_y, 0x00000000);
+            } else {
+                draw_char(*str, cursor_x, cursor_y, 0xFFFFFFFF);
+            }
             cursor_x += 8;
             if (cursor_x + 8 > kboot_params.width) {
                 cursor_x = 0;

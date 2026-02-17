@@ -53,6 +53,42 @@ typedef struct _EFI_GRAPHICS_OUTPUT_PROTOCOL {
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL;
 
+/* File System Protocols */
+typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
+
+struct _EFI_FILE_PROTOCOL {
+    uint64 Revision;
+    EFI_STATUS (EFIAPI *Open)(EFI_FILE_PROTOCOL *This, EFI_FILE_PROTOCOL **NewHandle, CHAR16 *FileName, uint64 OpenMode, uint64 Attributes);
+    EFI_STATUS (EFIAPI *Close)(EFI_FILE_PROTOCOL *This);
+    void* Delete;
+    EFI_STATUS (EFIAPI *Read)(EFI_FILE_PROTOCOL *This, UINTN *BufferSize, void *Buffer);
+    void* Write;
+    void* GetPosition;
+    void* SetPosition;
+    EFI_STATUS (EFIAPI *GetInfo)(EFI_FILE_PROTOCOL *This, EFI_GUID *InformationType, UINTN *BufferSize, void *Buffer);
+    // ...
+};
+
+typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
+    uint64 Revision;
+    EFI_STATUS (EFIAPI *OpenVolume)(struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, EFI_FILE_PROTOCOL **Root);
+} EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+
+typedef struct {
+    uint8 Hdr[24];
+    EFI_HANDLE ParentHandle;
+    EFI_SYSTEM_TABLE *SystemTable;
+    EFI_HANDLE DeviceHandle;
+    // ...
+} EFI_LOADED_IMAGE_PROTOCOL;
+
+typedef struct {
+    uint64 Size;
+    uint64 FileSize;
+    uint64 PhysicalSize;
+    // ... rest is timestamps and attributes
+} EFI_FILE_INFO;
+
 struct _EFI_BOOT_SERVICES {
     uint8  Hdr[24];
     void*  RaiseTPL;
@@ -60,8 +96,8 @@ struct _EFI_BOOT_SERVICES {
     void*  AllocatePages;
     void*  FreePages;
     void*  GetMemoryMap;
-    void*  AllocatePool;
-    void*  FreePool;
+    EFI_STATUS (EFIAPI *AllocatePool)(uint32 PoolType, UINTN Size, void **Buffer);
+    EFI_STATUS (EFIAPI *FreePool)(void *Buffer);
     void*  CreateEvent;
     void*  SetTimer;
     void*  WaitForEvent;

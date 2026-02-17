@@ -1,7 +1,7 @@
 #ifndef RNAFS_H
 #define RNAFS_H
 
-#include "../include/types.h"
+#include "../../include/types.h"
 
 #define FS_BLOCK_SIZE 4096
 #define SECTOR_SIZE   512

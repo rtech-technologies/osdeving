@@ -9,16 +9,15 @@ LDFLAGS = -nostdlib -znocombreloc -shared -Bsymbolic
 
 KERNEL_SRCS = ../kernel/entry.c \
               ../kernel/main.c \
-              ../services/console.c \
-              ../services/font_data.c \
-              ../services/memory.c \
-              ../services/disk.c \
-              ../services/fs.c \
-              ../services/rnafs.c \
-              ../services/event.c
-
-# Category 10: ACPI power code isolation - separate object
-POWER_OBJ = ../services/power.o
+              ../services/io/console.c \
+              ../services/io/input.c \
+              ../services/io/font_data.c \
+              ../services/mem/memory.c \
+              ../services/io/disk.c \
+              ../services/fs/fs.c \
+              ../services/fs/rnafs.c \
+              ../services/core/event.c \
+              ../services/system/power.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
@@ -37,11 +36,17 @@ kernel.so: $(KERNEL_OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-shell.bin: ../programs/shell.c ../programs/libsystem.c ../services/console.o ../services/font_data.o ../services/event.o
+shell.bin: ../programs/shell.c ../programs/libsystem.c ../services/io/console.o ../services/io/input.o ../services/io/font_data.o ../services/core/event.o
 	$(CC) $(CFLAGS) -c ../programs/shell.c -o shell.o
 	$(CC) $(CFLAGS) -c ../programs/libsystem.c -o libsystem.o
-	$(LD) -nostdlib -Ttext 0x0 --oformat binary shell.o libsystem.o ../services/console.o ../services/font_data.o ../services/event.o -o shell.bin
+	# Category link order: libsystem.o first for entry point at 0x0
+	$(LD) -nostdlib -Ttext 0x0 --oformat binary libsystem.o shell.o ../services/io/console.o ../services/io/input.o ../services/io/font_data.o ../services/core/event.o -o shell.bin
 	cp shell.bin ../programs/
+	mkdir -p ../boot
+	cp shell.bin ../boot/
+
+run: all
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=fat:rw:../boot -net none
 
 clean:
-	rm -f $(KERNEL_OBJS) $(POWER_OBJ) kernel.so shell.o libsystem.o bootx64.efi shell.bin ../boot/bootx64.efi ../programs/shell.bin
+	rm -f $(KERNEL_OBJS) kernel.so shell.o libsystem.o bootx64.efi shell.bin ../boot/bootx64.efi ../boot/shell.bin ../programs/shell.bin

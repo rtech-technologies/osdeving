@@ -1,5 +1,5 @@
 #include "disk.h"
-#include "../kernel/kernel.h"
+#include "../../kernel/kernel.h"
 
 void disk_init() {
     /* Ramdisk is already in memory */
