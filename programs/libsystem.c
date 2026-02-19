@@ -37,6 +37,14 @@ void exit() {
     if (g_syscalls && g_syscalls->exit) g_syscalls->exit();
 }
 
+void format() {
+    if (g_syscalls && g_syscalls->format) g_syscalls->format();
+}
+
+void lsfs() {
+    if (g_syscalls && g_syscalls->lsfs) g_syscalls->lsfs();
+}
+
 void _start(boot_params_t* params, syscall_table_t* syscalls) {
     if (params) kboot_params = *params;
     if (syscalls) g_syscalls = syscalls;

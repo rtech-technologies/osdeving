@@ -12,6 +12,10 @@ void* alloc(uint64 size);
 void free(void* ptr);
 void exit();
 
+/* Filesystem extensions */
+void format();
+void lsfs();
+
 /* Category: Syscall Table */
 typedef struct {
     void (*print)(const char*);
@@ -21,6 +25,9 @@ typedef struct {
     void* (*alloc)(uint64);
     void (*free)(void*);
     void (*exit)();
+
+    void (*format)();
+    void (*lsfs)();
 } syscall_table_t;
 
 #endif

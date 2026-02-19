@@ -33,9 +33,10 @@ typedef struct __attribute__((packed)) {
 
 /* Category 12: Custom types and naming */
 int rnafs_mount(uint64 partition_start_lba);
+void mkfs_rnafs(uint64 partition_start_lba, uint32 total_sectors);
 int rnafs_create_file(uint32 parent, const char* name, uint32 size_bytes);
 int rnafs_read_file(const char* name, void* buffer, uint32 max_bytes);
 int rnafs_write_file(const char* name, const void* buffer, uint32 size_bytes);
-void rnafs_debug_dump_superblock(uint64 lba);
+void rnafs_ls();
 
 #endif

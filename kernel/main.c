@@ -22,10 +22,25 @@ void register_service(service_init_t init_func) {
     }
 }
 
-void exit() {
+void exit_kernel() {
     running = 0;
     trigger(EVENT_CLEANUP);
     trigger(EVENT_EXIT);
+}
+
+void shell_format() {
+    /* v0: Format RNAFS at LBA 4096 (arbitrary for testing) */
+    print("Formatting RNAFS at LBA 4096...\n");
+    mkfs_rnafs(4096, 20480);
+}
+
+void shell_lsfs() {
+    /* Try mount first if not ready */
+    if (!rnafs_mount(4096)) {
+        print("RNAFS not mounted. Use format first or check disk.\n");
+        return;
+    }
+    rnafs_ls();
 }
 
 void kernel_main(boot_params_t* params) {
@@ -44,6 +59,9 @@ void kernel_main(boot_params_t* params) {
         registered_services[i]();
     }
 
+    /* Mount RNAFS if already formatted */
+    rnafs_mount(4096);
+
     trigger(EVENT_INIT);
 
     print("Kernel started\n");
@@ -56,7 +74,9 @@ void kernel_main(boot_params_t* params) {
         .fwrite = fwrite,
         .alloc = alloc,
         .free = free,
-        .exit = exit
+        .exit = exit_kernel,
+        .format = shell_format,
+        .lsfs = shell_lsfs
     };
 
     /* 3. Load and run shell (v0: hardcoded loading) */
