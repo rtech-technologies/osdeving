@@ -5,12 +5,14 @@
 
 #define EFIAPI __attribute__((ms_abi))
 
-/* Category 12: use custom types */
 #define EFI_SUCCESS 0
+#define EFI_BUFFER_TOO_SMALL 0x8000000000000005ULL
+#define EFI_INVALID_PARAMETER 0x8000000000000002ULL
 
 typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 typedef struct _EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
 typedef struct _EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
+typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
 
 typedef struct {
     uint32 Data1;
@@ -53,9 +55,6 @@ typedef struct _EFI_GRAPHICS_OUTPUT_PROTOCOL {
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL;
 
-/* File System Protocols */
-typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
-
 struct _EFI_FILE_PROTOCOL {
     uint64 Revision;
     EFI_STATUS (EFIAPI *Open)(EFI_FILE_PROTOCOL *This, EFI_FILE_PROTOCOL **NewHandle, CHAR16 *FileName, uint64 OpenMode, uint64 Attributes);
@@ -66,7 +65,6 @@ struct _EFI_FILE_PROTOCOL {
     void* GetPosition;
     void* SetPosition;
     EFI_STATUS (EFIAPI *GetInfo)(EFI_FILE_PROTOCOL *This, EFI_GUID *InformationType, UINTN *BufferSize, void *Buffer);
-    // ...
 };
 
 typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
@@ -75,18 +73,26 @@ typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
 } EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 
 typedef struct {
-    uint8 Hdr[24];
+    uint32 Revision;
     EFI_HANDLE ParentHandle;
     EFI_SYSTEM_TABLE *SystemTable;
     EFI_HANDLE DeviceHandle;
-    // ...
+    void *FilePath;
+    void *Reserved;
+    uint32 LoadOptionsSize;
+    void *LoadOptions;
+    void *ImageBase;
+    uint64 ImageSize;
+    uint32 ImageCodeType;
+    uint32 ImageDataType;
+    void *Unload;
 } EFI_LOADED_IMAGE_PROTOCOL;
 
 typedef struct {
     uint64 Size;
     uint64 FileSize;
     uint64 PhysicalSize;
-    // ... rest is timestamps and attributes
+    /* ... rest is timestamps and attributes */
 } EFI_FILE_INFO;
 
 struct _EFI_BOOT_SERVICES {
@@ -108,6 +114,7 @@ struct _EFI_BOOT_SERVICES {
     void*  ReinstallProtocolInterface;
     void*  UninstallProtocolInterface;
     EFI_STATUS (EFIAPI *HandleProtocol)(EFI_HANDLE Handle, EFI_GUID *Protocol, void **Interface);
+    void*  Reserved;
     void*  RegisterProtocolNotify;
     EFI_STATUS (EFIAPI *LocateHandle)(UINTN SearchType, EFI_GUID *Protocol, void *SearchKey, UINTN *BufferSize, EFI_HANDLE *Buffer);
     void*  LocateDevicePath;
@@ -117,11 +124,9 @@ struct _EFI_BOOT_SERVICES {
     void*  Exit;
     void*  UnloadImage;
     EFI_STATUS (EFIAPI *ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
-    // ...
     void*  GetNextMonotonicCount;
     void*  Stall;
     void*  SetWatchdogTimer;
-    // ...
     void*  ConnectController;
     void*  DisconnectController;
     void*  OpenProtocol;
@@ -134,14 +139,19 @@ struct _EFI_BOOT_SERVICES {
 
 struct _EFI_SYSTEM_TABLE {
     uint8  Hdr[24];
-    void*  ConsoleInHandle;
+    CHAR16 *FirmwareVendor;
+    uint32 FirmwareRevision;
+    uint32 Padding;
+    EFI_HANDLE ConsoleInHandle;
     void*  ConIn;
-    void*  ConsoleOutHandle;
+    EFI_HANDLE ConsoleOutHandle;
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
-    void*  StandardErrorHandle;
+    EFI_HANDLE StandardErrorHandle;
     void*  StdErr;
     void*  RuntimeServices;
     EFI_BOOT_SERVICES *BootServices;
+    UINTN  NumberOfTableEntries;
+    void*  ConfigurationTable;
 };
 
 #endif
