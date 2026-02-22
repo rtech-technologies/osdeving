@@ -3,8 +3,9 @@
 
 #include "../include/types.h"
 #include "../include/system.h"
+#include "../boot/efi_types.h"
 
-/* Category 11: Framebuffer params without UEFI */
+/* Category 11: Framebuffer params with UEFI */
 typedef struct {
     uint32* framebuffer;
     uint32  width;
@@ -14,6 +15,10 @@ typedef struct {
     /* Ramdisk info for v0 disk model */
     void*   ramdisk_base;
     uint64  ramdisk_size;
+
+    /* UEFI handles */
+    EFI_SYSTEM_TABLE *SystemTable;
+    EFI_HANDLE       ImageHandle;
 } boot_params_t;
 
 /* Events */

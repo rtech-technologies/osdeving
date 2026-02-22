@@ -12,12 +12,6 @@ void* alloc(uint64 size);
 void free(void* ptr);
 void exit();
 
-/* Filesystem / Partitioning extensions */
-void format(int idx);
-void mount(int idx);
-void lsfs();
-void addpart(uint64 start, uint32 count);
-
 /* Syscall Table */
 typedef struct {
     void (*print)(const char*);
@@ -27,11 +21,6 @@ typedef struct {
     void* (*alloc)(uint64);
     void (*free)(void*);
     void (*exit)();
-
-    void (*format)(int);
-    void (*mount)(int);
-    void (*lsfs)();
-    void (*addpart)(uint64, uint32);
 } syscall_table_t;
 
 #endif

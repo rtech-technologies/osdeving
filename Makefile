@@ -31,16 +31,8 @@ LIBS = -lefi -lgnuefi
 KERNEL_SRCS = kernel/entry.c \
               kernel/main.c \
               services/io/console.c \
-              services/io/input.c \
-              services/io/font_data.c \
               services/mem/memory.c \
-              services/io/disk.c \
-              services/io/diskman.c \
-              services/fs/fs.c \
-              services/fs/fat.c \
-              services/fs/rnafs.c \
-              services/core/event.c \
-              services/system/power.c
+              services/core/event.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 

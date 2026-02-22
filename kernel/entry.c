@@ -50,30 +50,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
-    /* 3. Exit Boot Services */
-    UINTN map_size = 0;
-    UINTN map_key = 0;
-    UINTN descriptor_size = 0;
-    uint32 descriptor_version = 0;
-    void* map = NULL;
+    /* 3. Stay in UEFI environment */
+    params.SystemTable = SystemTable;
+    params.ImageHandle = ImageHandle;
 
-    /* Get size first */
-    SystemTable->BootServices->GetMemoryMap(&map_size, NULL, &map_key, &descriptor_size, &descriptor_version);
-    map_size += 2 * descriptor_size;
-
-    if (SystemTable->BootServices->AllocatePool(2, map_size, &map) == EFI_SUCCESS) {
-        /* Retry loop for ExitBootServices */
-        for (int i = 0; i < 3; i++) {
-            if (SystemTable->BootServices->GetMemoryMap(&map_size, map, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
-                if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
-                    /* 4. Hand off to Kernel */
-                    kernel_main(&params);
-                    break;
-                }
-            }
-            /* If we failed, map_size might have increased */
-        }
-    }
+    /* 4. Hand off to Kernel */
+    kernel_main(&params);
 
     while(1) { __asm__ volatile("hlt"); }
     return EFI_SUCCESS;
