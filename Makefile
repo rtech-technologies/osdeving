@@ -4,22 +4,26 @@ CC = gcc
 LD = ld
 OBJCOPY = objcopy
 
+# Paths
+BOOT_DIR = boot
+EFI_DIR = $(BOOT_DIR)/EFI/BOOT
+
 # Paths for EFI build (standard on Debian/Ubuntu)
 EFI_LIB = /usr/lib
 EFI_LDS = /usr/lib/elf_x86_64_efi.lds
 EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
 
 # Compilation Flags
-# Using -DEFI_FUNCTION_WRAPPER if using uefi_call_wrapper (not strictly needed with ms_abi but good for compatibility)
 CFLAGS = -Iinclude -fno-stack-protector -fpic \
-         -fshort-wchar -mno-red-zone -Wall -fno-builtin -m64
+         -fshort-wchar -mno-red-zone -Wall -fno-builtin -m64 \
+         -DEFI_FUNCTION_WRAPPER
 
-# Linker Flags for EFI
+# Linker Flags for EFI Shared Object
 LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
               -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
 
 # Linker Flags for raw binary (Shell)
-LDFLAGS_BIN = -nostdlib -T boot/linker.ld --oformat binary
+LDFLAGS_BIN = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
 
 LIBS = -lefi -lgnuefi
 
@@ -49,21 +53,21 @@ SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 HEADERS = $(shell find include kernel services -name "*.h")
 
 # Default Target
-all: boot/EFI/BOOT/BOOTX64.EFI boot/shell.bin
+all: $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
 
 # Kernel Build
-boot/EFI/BOOT/BOOTX64.EFI: kernel.so
-	@mkdir -p boot/EFI/BOOT
+$(EFI_DIR)/BOOTX64.EFI: kernel.so
+	@mkdir -p $(EFI_DIR)
 	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic \
 	           -j .dynsym  -j .rel -j .rela -j .reloc \
-	           --target=efi-app-x86_64 kernel.so boot/EFI/BOOT/BOOTX64.EFI
+	           --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
 
 kernel.so: $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS_EFI) $(KERNEL_OBJS) -o kernel.so $(LIBS)
 
 # Shell Build
-boot/shell.bin: $(SHELL_OBJS)
-	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o boot/shell.bin
+$(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
+	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
 
 # Generic Rule for Object Files
 %.o: %.c $(HEADERS)
@@ -72,8 +76,8 @@ boot/shell.bin: $(SHELL_OBJS)
 # ISO Image Build
 iso: all
 	@mkdir -p iso_root/EFI/BOOT
-	@cp boot/EFI/BOOT/BOOTX64.EFI iso_root/EFI/BOOT/
-	@cp boot/shell.bin iso_root/
+	@cp $(EFI_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
+	@cp $(BOOT_DIR)/shell.bin iso_root/
 	xorriso -as mkisofs -R -f -e EFI/BOOT/BOOTX64.EFI -no-emul-boot \
 	        -o osx2.iso iso_root
 	@rm -rf iso_root
@@ -86,8 +90,8 @@ run: all
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so boot/shell.bin osx2.iso
-	@rm -rf boot/EFI
+	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso
+	@rm -rf $(BOOT_DIR)/EFI
 	@echo "Cleaned up build artifacts."
 
 .PHONY: all clean run iso

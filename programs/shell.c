@@ -5,8 +5,17 @@ static int strcmp(const char* s1, const char* s2) {
     return *(unsigned char*)s1 - *(unsigned char*)s2;
 }
 
+static uint32 atoi(const char* s) {
+    uint32 res = 0;
+    while (*s >= '0' && *s <= '9') {
+        res = res * 10 + (*s - '0');
+        s++;
+    }
+    return res;
+}
+
 int program_main() {
-    print("OSx2 Shell v0.2\n");
+    print("OSx2 Shell v0.3\n");
     char buffer[128];
 
     while (1) {
@@ -17,13 +26,22 @@ int program_main() {
             exit();
             break;
         } else if (strcmp(buffer, "help") == 0) {
-            print("Commands: help, exit, clear, format, lsfs, testfs\n");
-        } else if (strcmp(buffer, "clear") == 0) {
-            print("Clear not implemented\n");
+            print("Commands: help, exit, clear, format, mount, ls, addpart, testfs\n");
         } else if (strcmp(buffer, "format") == 0) {
-            format();
-        } else if (strcmp(buffer, "lsfs") == 0) {
+            char s_idx[8];
+            input("Partition index: ", s_idx, 8);
+            format(atoi(s_idx));
+        } else if (strcmp(buffer, "mount") == 0) {
+            char s_idx[8];
+            input("Partition index: ", s_idx, 8);
+            mount(atoi(s_idx));
+        } else if (strcmp(buffer, "ls") == 0) {
             lsfs();
+        } else if (strcmp(buffer, "addpart") == 0) {
+            char s_start[32], s_count[32];
+            input("Start LBA: ", s_start, 32);
+            input("Sector Count: ", s_count, 32);
+            addpart(atoi(s_start), atoi(s_count));
         } else if (strcmp(buffer, "testfs") == 0) {
             print("Creating file 'test'...\n");
             const char* data = "Hello RNAFS World!";
@@ -36,7 +54,7 @@ int program_main() {
                     print("\n");
                 }
             } else {
-                print("Write failed.\n");
+                print("Write failed (Is RNAFS mounted?)\n");
             }
         } else if (buffer[0]) {
             print("Unknown command: ");

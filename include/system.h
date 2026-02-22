@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-/* Public API for programs - Category 12: Use custom types */
+/* Public API for programs */
 void print(const char* str);
 void input(const char* prompt, char* buffer, uint64 size);
 INTN fread(const char* path, void* buffer, uint64 max_size);
@@ -12,11 +12,13 @@ void* alloc(uint64 size);
 void free(void* ptr);
 void exit();
 
-/* Filesystem extensions */
-void format();
+/* Filesystem / Partitioning extensions */
+void format(int idx);
+void mount(int idx);
 void lsfs();
+void addpart(uint64 start, uint32 count);
 
-/* Category: Syscall Table */
+/* Syscall Table */
 typedef struct {
     void (*print)(const char*);
     void (*input)(const char*, char*, uint64);
@@ -26,8 +28,10 @@ typedef struct {
     void (*free)(void*);
     void (*exit)();
 
-    void (*format)();
+    void (*format)(int);
+    void (*mount)(int);
     void (*lsfs)();
+    void (*addpart)(uint64, uint32);
 } syscall_table_t;
 
 #endif
