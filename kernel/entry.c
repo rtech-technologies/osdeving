@@ -37,7 +37,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
                     UINTN size = (UINTN)file_size;
                     void* buffer;
-                    if (SystemTable->BootServices->AllocatePool(2, size, &buffer) == EFI_SUCCESS) {
+                    /* Type 1 is EfiLoaderCode, ensuring the buffer is executable */
+                    if (SystemTable->BootServices->AllocatePool(1, size, &buffer) == EFI_SUCCESS) {
                         if (file->Read(file, &size, buffer) == EFI_SUCCESS) {
                             params.ramdisk_base = buffer;
                             params.ramdisk_size = (uint64)size;

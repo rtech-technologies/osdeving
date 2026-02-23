@@ -52,7 +52,7 @@ $(EFI_DIR)/BOOTX64.EFI: kernel.so
 	@mkdir -p $(EFI_DIR)
 	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic \
 	           -j .dynsym  -j .rel -j .rela -j .reloc \
-	           --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
+	           -j .rodata* --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
 
 kernel.so: $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS_EFI) $(KERNEL_OBJS) -o kernel.so $(LIBS)
@@ -75,6 +75,16 @@ iso: all
 	@rm -rf iso_root
 	@echo "OSx2 ISO created: osx2.iso"
 
+# Disk Image Build
+disk: all
+	dd if=/dev/zero of=disk.img bs=1M count=64
+	mformat -i disk.img -F ::
+	mmd -i disk.img ::/EFI
+	mmd -i disk.img ::/EFI/BOOT
+	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/
+	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/
+	@echo "OSx2 Disk Image created: disk.img"
+
 # QEMU Run
 run: all
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=fat:rw:boot -net none
@@ -82,8 +92,8 @@ run: all
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso
+	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso disk.img
 	@rm -rf $(BOOT_DIR)/EFI
 	@echo "Cleaned up build artifacts."
 
-.PHONY: all clean run iso
+.PHONY: all clean run iso disk
