@@ -10,6 +10,7 @@
 #define EFI_INVALID_PARAMETER 0x8000000000000002ULL
 
 typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
+typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 typedef struct _EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
 typedef struct _EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
@@ -29,6 +30,17 @@ struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
     void* SetMode;
     void* SetAttribute;
     EFI_STATUS (EFIAPI *ClearScreen)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
+};
+
+typedef struct {
+    uint16 ScanCode;
+    CHAR16 UnicodeChar;
+} EFI_INPUT_KEY;
+
+struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
+    EFI_STATUS (EFIAPI *Reset)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *This, uint8 ExtendedVerification);
+    EFI_STATUS (EFIAPI *ReadKeyStroke)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *This, EFI_INPUT_KEY *Key);
+    void* WaitForKey;
 };
 
 typedef struct {
@@ -61,7 +73,7 @@ struct _EFI_FILE_PROTOCOL {
     EFI_STATUS (EFIAPI *Close)(EFI_FILE_PROTOCOL *This);
     void* Delete;
     EFI_STATUS (EFIAPI *Read)(EFI_FILE_PROTOCOL *This, UINTN *BufferSize, void *Buffer);
-    void* Write;
+    EFI_STATUS (EFIAPI *Write)(EFI_FILE_PROTOCOL *This, UINTN *BufferSize, void *Buffer);
     void* GetPosition;
     void* SetPosition;
     EFI_STATUS (EFIAPI *GetInfo)(EFI_FILE_PROTOCOL *This, EFI_GUID *InformationType, UINTN *BufferSize, void *Buffer);
@@ -143,7 +155,7 @@ struct _EFI_SYSTEM_TABLE {
     uint32 FirmwareRevision;
     uint32 Padding;
     EFI_HANDLE ConsoleInHandle;
-    void*  ConIn;
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *ConIn;
     EFI_HANDLE ConsoleOutHandle;
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
     EFI_HANDLE StandardErrorHandle;

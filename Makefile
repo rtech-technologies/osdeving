@@ -31,6 +31,7 @@ LIBS = -lefi -lgnuefi
 KERNEL_SRCS = kernel/entry.c \
               kernel/main.c \
               services/io/console.c \
+              services/io/fs.c \
               services/mem/memory.c \
               services/core/event.c
 

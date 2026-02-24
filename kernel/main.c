@@ -1,6 +1,7 @@
 #include "kernel.h"
 #include "../services/io/console.h"
 #include "../services/mem/memory.h"
+#include "../services/io/fs.h"
 #include "../services/core/event.h"
 
 boot_params_t kboot_params;
@@ -23,9 +24,10 @@ void exit_kernel() {
 void kernel_main(boot_params_t* params) {
     kboot_params = *params;
 
-    /* 1. Register Services (console + memory only as per v0) */
+    /* 1. Register Services */
     register_service(console_init);
     register_service(memory_init);
+    register_service(fs_init);
 
     /* 2. Initialize Services */
     for (uint32 i = 0; i < service_count; i++) {
@@ -39,9 +41,9 @@ void kernel_main(boot_params_t* params) {
     /* Populate syscall table */
     syscall_table_t syscalls = {
         .print = print,
-        .input = NULL,
-        .fread = NULL,
-        .fwrite = NULL,
+        .input = input,
+        .fread = fread,
+        .fwrite = fwrite,
         .alloc = alloc,
         .free = free,
         .exit = exit_kernel
