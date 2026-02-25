@@ -1,8 +1,6 @@
 #include "memory.h"
-#include "../../include/types.h"
+#include "../kernel/kernel.h"
 
-#define HEAP_SIZE (4 * 1024 * 1024)
-static uint8 global_heap[HEAP_SIZE];
 static uint64 heap_ptr = 0;
 
 void memory_init() {
@@ -13,9 +11,10 @@ void* alloc(uint64 size) {
     /* Align to 16 bytes */
     size = (size + 15) & ~15;
 
-    if (heap_ptr + size > HEAP_SIZE) return NULL;
+    if (!kboot_params.heap_base) return NULL;
+    if (heap_ptr + size > kboot_params.heap_size) return NULL;
 
-    void* ptr = &global_heap[heap_ptr];
+    void* ptr = (uint8*)kboot_params.heap_base + heap_ptr;
     heap_ptr += size;
     return ptr;
 }

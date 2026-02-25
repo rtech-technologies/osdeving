@@ -37,7 +37,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
                     UINTN size = (UINTN)file_size;
                     void* buffer;
-                    /* Type 1 is EfiLoaderCode, ensuring the buffer is executable */
                     if (SystemTable->BootServices->AllocatePool(1, size, &buffer) == EFI_SUCCESS) {
                         if (file->Read(file, &size, buffer) == EFI_SUCCESS) {
                             params.ramdisk_base = buffer;
@@ -51,7 +50,14 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
-    /* 3. Stay in UEFI environment */
+    /* 3. Allocate Heap */
+    UINTN heap_size = 4 * 1024 * 1024;
+    void* heap_base;
+    if (SystemTable->BootServices->AllocatePool(2, heap_size, &heap_base) == EFI_SUCCESS) {
+        params.heap_base = heap_base;
+        params.heap_size = heap_size;
+    }
+
     params.SystemTable = SystemTable;
     params.ImageHandle = ImageHandle;
 

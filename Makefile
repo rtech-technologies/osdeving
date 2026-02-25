@@ -30,9 +30,12 @@ LIBS = -lefi -lgnuefi
 # Kernel Source Files
 KERNEL_SRCS = kernel/entry.c \
               kernel/main.c \
-              services/io/console.c \
-              services/io/fs.c \
-              services/mem/memory.c \
+              services/console.c \
+              services/font_data.c \
+              services/input.c \
+              services/memory.c \
+              services/fs.c \
+              services/rnafs.c \
               services/core/event.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)

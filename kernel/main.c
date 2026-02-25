@@ -1,7 +1,8 @@
 #include "kernel.h"
-#include "../services/io/console.h"
-#include "../services/mem/memory.h"
-#include "../services/io/fs.h"
+#include "../services/console.h"
+#include "../services/memory.h"
+#include "../services/input.h"
+#include "../services/fs.h"
 #include "../services/core/event.h"
 
 boot_params_t kboot_params;
@@ -27,6 +28,7 @@ void kernel_main(boot_params_t* params) {
     /* 1. Register Services */
     register_service(console_init);
     register_service(memory_init);
+    register_service(input_init);
     register_service(fs_init);
 
     /* 2. Initialize Services */
@@ -34,7 +36,7 @@ void kernel_main(boot_params_t* params) {
         registered_services[i]();
     }
 
-    print("Kernel started\n");
+    print("Kernel started (Freestanding mode)\n");
 
     trigger(EVENT_INIT);
 

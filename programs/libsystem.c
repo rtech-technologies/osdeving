@@ -1,5 +1,6 @@
 #include "../include/system.h"
 #include "../kernel/kernel.h"
+#include "../include/utils.h"
 
 boot_params_t kboot_params;
 static syscall_table_t* g_syscalls = NULL;

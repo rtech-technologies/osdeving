@@ -16,7 +16,11 @@ typedef struct {
     void*   ramdisk_base;
     uint64  ramdisk_size;
 
-    /* UEFI handles */
+    /* Heap info */
+    void*   heap_base;
+    uint64  heap_size;
+
+    /* UEFI handles (for entry.c use only) */
     EFI_SYSTEM_TABLE *SystemTable;
     EFI_HANDLE       ImageHandle;
 } boot_params_t;
