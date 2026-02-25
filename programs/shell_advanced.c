@@ -480,6 +480,26 @@ static void cmd_run(const char* args) {
         return;
     }
 
+    /* Preference: if a `runtime.rsl` exists on the RNAFS, we will run that runtime
+       and pass the requested program as its first argument. This keeps the loader
+       logic isolated in `runtime` program. If `runtime.rsl` is not present, fall back
+       to reading and running the requested program directly (legacy behavior). */
+
+    char loader_name[64]; loader_name[0] = 0;
+    {
+        /* test for runtime.rsl presence */
+        void* thdr = alloc(64);
+        if (thdr) {
+            int tg = fread("runtime.rsl", thdr, 64);
+            if (tg > 0) {
+                char_strncpy(loader_name, "runtime.rsl", 64);
+            }
+            free(thdr);
+        }
+    }
+
+    /* If loader_name set, we will load runtime.rsl and pass `prog` as its argv[0] */
+
     /* Read small header first to validate format */
     typedef struct {
         char magic[4];
@@ -490,7 +510,8 @@ static void cmd_run(const char* args) {
     } rsl_header_t;
 
     rsl_header_t hdr;
-    int got = fread(prog, (void*)&hdr, sizeof(rsl_header_t));
+    const char* to_load = loader_name[0] ? loader_name : prog;
+    int got = fread(to_load, (void*)&hdr, sizeof(rsl_header_t));
     if (got < (int)sizeof(rsl_header_t)) {
         print("Error: cannot read program header\n");
         return;
@@ -525,12 +546,24 @@ static void cmd_run(const char* args) {
     /* Call init if present */
     if (hdr.init_offset != 0) {
         void (*init_fn)(int, char**) = (void(*)(int,char**))((char*)img + hdr.init_offset);
-        init_fn(argc, argv_local);
+        /* If we're launching runtime, its argv should be: [target, arg1, arg2...] */
+        if (loader_name[0]) init_fn(argc+1, (char**)&(char*[]){prog, argv_local[0], argv_local[1], argv_local[2], argv_local[3], argv_local[4], NULL});
+        else init_fn(argc, argv_local);
     }
 
     /* Call entry: convention int entry(int argc, char** argv) */
     int (*prog_entry)(int, char**) = (int(*)(int,char**))entry_ptr;
-    int exit_code = prog_entry(argc, argv_local);
+    int exit_code;
+    if (loader_name[0]) {
+        /* build argv for runtime: argv[0]=prog, then remaining args */
+        char* rargs[18];
+        rargs[0] = prog;
+        for (int ri = 0; ri < argc && ri < 16; ri++) rargs[1+ri] = argv_local[ri];
+        rargs[1+argc] = NULL;
+        exit_code = prog_entry(argc+1, rargs);
+    } else {
+        exit_code = prog_entry(argc, argv_local);
+    }
 
     /* Cleanup */
     free(img);
