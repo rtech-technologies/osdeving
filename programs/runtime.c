@@ -58,6 +58,13 @@ int entry(int argc, char** argv) {
     int (*prog_entry)(int,char**) = (int(*)(int,char**))((char*)img + hdr.entry_offset);
     int rc = prog_entry(argc-1, argv+1);
 
+    /* If header 'reserved' field contains a cleanup offset, call it before exit */
+    if (hdr.reserved != 0) {
+        void (*cleanup_fn)(void) = (void(*)(void))((char*)img + hdr.reserved);
+        /* call cleanup synchronously */
+        cleanup_fn();
+    }
+
     free(img);
     return rc;
 }

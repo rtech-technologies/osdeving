@@ -37,6 +37,9 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 SHELL_SRCS = programs/libsystem.c programs/shell_advanced.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)
+RUNTIME_SRC = programs/runtime.c
+
+RUNTIME_RSL = programs/runtime.rsl
 
 HEADERS = $(shell find include kernel services -name "*.h")
 
@@ -88,6 +91,11 @@ kernel.so: $(KERNEL_OBJS)
 $(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
 	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
 
+# Build runtime.rsl from programs/runtime.c using helper (no Python required)
+$(RUNTIME_RSL): $(RUNTIME_SRC)
+	@echo "Building runtime.rsl"
+	./tools/build_rsl.sh $(RUNTIME_SRC) $(RUNTIME_RSL)
+
 # Object files
 %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -101,6 +109,8 @@ disk: $(BOOT_DIR)/shell.bin
 	mmd -i disk.img ::/EFI ::/EFI/BOOT
 	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/
 	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/
+	@# include runtime if present
+	if [ -f $(RUNTIME_RSL) ]; then mcopy -i disk.img $(RUNTIME_RSL) ::/; fi
 	@echo "✓ disk.img created"
 
 # ISO image
@@ -110,6 +120,8 @@ iso: $(BOOT_DIR)/shell.bin
 	@mkdir -p iso_root/EFI/BOOT
 	@cp $(EFI_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
 	@cp $(BOOT_DIR)/shell.bin iso_root/
+	@# include runtime into ISO root if present
+	if [ -f $(RUNTIME_RSL) ]; then cp $(RUNTIME_RSL) iso_root/; fi
 	xorriso -as mkisofs -R -f -e EFI/BOOT/BOOTX64.EFI -no-emul-boot \
 	        -o osx2.iso iso_root 2>/dev/null
 	@rm -rf iso_root

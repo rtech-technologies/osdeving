@@ -37,6 +37,10 @@ typedef enum {
 typedef void (*service_init_t)();
 void register_service(service_init_t init_func);
 
+/* New service init prototypes (RRDFS ramdisk FS and FAT storage) */
+void rrdfs_init();
+void fat_init();
+
 /* Event System */
 void trigger(event_t event);
 typedef void (*event_handler_t)(event_t event);
