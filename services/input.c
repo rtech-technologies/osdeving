@@ -113,8 +113,14 @@ static char get_char() {
 }
 
 void input(const char* prompt, char* buffer, uint64 size) {
+    if (!buffer || size == 0) return;
+    
     print(prompt);
     uint64 i = 0;
+    
+    /* Initialize buffer to zeros */
+    for (uint64 j = 0; j < size; j++) buffer[j] = 0;
+    
     while (i < size - 1) {
         char c = get_char();
         if (c == '\n') {
@@ -123,6 +129,7 @@ void input(const char* prompt, char* buffer, uint64 size) {
         } else if (c == '\b') {
             if (i > 0) {
                 i--;
+                buffer[i] = 0;
                 print("\b \b");
             }
         } else if (c > 0) {

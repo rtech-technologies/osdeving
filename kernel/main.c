@@ -28,8 +28,9 @@ void kernel_main(boot_params_t* params) {
     /* 1. Register Services */
     register_service(console_init);
     register_service(memory_init);
-    register_service(input_init);
+    register_service(event_init);
     register_service(fs_init);
+    register_service(input_init);
 
     /* 2. Initialize Services */
     for (uint32 i = 0; i < service_count; i++) {

@@ -1,4 +1,8 @@
 # OSx2 (RTECH dos) Root Makefile
+# LFS-style: make menuconfig -> make -> make run
+
+# Configuration (sourced from .config, optional)
+-include .config
 
 CC = gcc
 LD = ld
@@ -8,96 +12,120 @@ OBJCOPY = objcopy
 BOOT_DIR = boot
 EFI_DIR = $(BOOT_DIR)/EFI/BOOT
 
-# Paths for EFI build (standard on Debian/Ubuntu)
+# EFI paths (Ubuntu/Debian)
 EFI_LIB = /usr/lib
 EFI_LDS = /usr/lib/elf_x86_64_efi.lds
 EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
 
-# Compilation Flags
-CFLAGS = -Iinclude -fno-stack-protector -fpic \
-         -fshort-wchar -mno-red-zone -Wall -fno-builtin -m64 \
-         -DEFI_FUNCTION_WRAPPER
+# Compilation flags
+CFLAGS = -Iinclude -fno-stack-protector -fpic -fshort-wchar -mno-red-zone \
+         -Wall -fno-builtin -m64 -DEFI_FUNCTION_WRAPPER
 
-# Linker Flags for EFI Shared Object
-LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
-              -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
+LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic \
+              -L $(EFI_LIB) $(EFI_CRT0)
 
-# Linker Flags for raw binary (Shell)
 LDFLAGS_BIN = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
 
 LIBS = -lefi -lgnuefi
 
-# Kernel Source Files
-KERNEL_SRCS = kernel/entry.c \
-              kernel/main.c \
-              services/console.c \
-              services/font_data.c \
-              services/input.c \
-              services/memory.c \
-              services/fs.c \
-              services/rnafs.c \
-              services/core/event.c
+# Source files
+KERNEL_SRCS = kernel/entry.c kernel/main.c services/console.c \
+              services/font_data.c services/input.c services/memory.c \
+              services/fs.c services/rnafs.c services/core/event.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
-# Shell Source Files
-# libsystem.o must be first for entry point at 0x0
-SHELL_SRCS = programs/libsystem.c programs/shell.c
+SHELL_SRCS = programs/libsystem.c programs/shell_advanced.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 
-# Header files for dependency tracking
 HEADERS = $(shell find include kernel services -name "*.h")
 
-# Default Target
-all: $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
+# === DEFAULT TARGET (must be first) ===
 
-# Kernel Build
+# Build kernel and shell
+.PHONY: all
+all: $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
+	@echo ""
+	@echo "✓ OSx2 Kernel & Shell Built"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  make disk   - Create FAT disk image"
+	@echo "  make iso    - Create ISO image"
+	@echo "  make run    - Test in QEMU"
+
+# Configuration menu
+.PHONY: menuconfig
+menuconfig:
+	@echo "OSx2 Configuration"
+	@echo ""
+	@echo "Edit .config file to configure build options:"
+	@echo "  BUILD_QEMU=1 - Build for QEMU"
+	@echo "  BUILD_IMG=1  - Build FAT disk image"
+	@echo "  BUILD_ISO=1  - Build ISO image"
+	@echo ""
+	@echo "Example: BUILD_QEMU=1 make"
+
+# Setup configuration (look for existing or create new)
+.PHONY: setup
+setup:
+	bash setup.sh
+
+# Alias for setup
+.PHONY: set
+set: setup
+
+# Kernel EFI binary
 $(EFI_DIR)/BOOTX64.EFI: kernel.so
 	@mkdir -p $(EFI_DIR)
-	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic \
-	           -j .dynsym  -j .rel -j .rela -j .reloc \
-	           -j .rodata* --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
+	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym \
+	           -j .rel -j .rela -j .reloc -j .rodata* \
+	           --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
 
 kernel.so: $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS_EFI) $(KERNEL_OBJS) -o kernel.so $(LIBS)
 
-# Shell Build
+# Shell binary
 $(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
 	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
 
-# Generic Rule for Object Files
+# Object files
 %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# ISO Image Build
-iso: all
+# Disk image
+.PHONY: disk
+disk: $(BOOT_DIR)/shell.bin
+	@echo "Creating disk.img..."
+	dd if=/dev/zero of=disk.img bs=1M count=64 2>/dev/null
+	mformat -i disk.img -F ::
+	mmd -i disk.img ::/EFI ::/EFI/BOOT
+	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/
+	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/
+	@echo "✓ disk.img created"
+
+# ISO image
+.PHONY: iso
+iso: $(BOOT_DIR)/shell.bin
+	@echo "Creating osx2.iso..."
 	@mkdir -p iso_root/EFI/BOOT
 	@cp $(EFI_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
 	@cp $(BOOT_DIR)/shell.bin iso_root/
 	xorriso -as mkisofs -R -f -e EFI/BOOT/BOOTX64.EFI -no-emul-boot \
-	        -o osx2.iso iso_root
+	        -o osx2.iso iso_root 2>/dev/null
 	@rm -rf iso_root
-	@echo "OSx2 ISO created: osx2.iso"
+	@echo "✓ osx2.iso created"
 
-# Disk Image Build
-disk: all
-	dd if=/dev/zero of=disk.img bs=1M count=64
-	mformat -i disk.img -F ::
-	mmd -i disk.img ::/EFI
-	mmd -i disk.img ::/EFI/BOOT
-	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/
-	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/
-	@echo "OSx2 Disk Image created: disk.img"
-
-# QEMU Run
-run: all
+# QEMU run
+.PHONY: run
+run: $(BOOT_DIR)/shell.bin
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=fat:rw:boot -net none
 
-# Cleanup
+# Clean
+.PHONY: clean
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso disk.img
+	@rm -f kernel.so $(BOOT_DIR)/shell.bin disk.img osx2.iso
 	@rm -rf $(BOOT_DIR)/EFI
-	@echo "Cleaned up build artifacts."
+	@echo "✓ Cleaned"
 
-.PHONY: all clean run iso disk
+.PHONY: all clean disk iso run menuconfig setup set

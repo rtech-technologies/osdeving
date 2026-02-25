@@ -9,10 +9,15 @@ void console_init() {
     cursor_x = 0;
     cursor_y = 0;
 
+    if (!kboot_params.framebuffer) {
+        return; /* Framebuffer not available yet */
+    }
+
     /* Clear screen */
-    if (kboot_params.framebuffer) {
+    if (kboot_params.width > 0 && kboot_params.height > 0) {
+        uint32 clear_color = 0x00000000;
         for (uint32 i = 0; i < kboot_params.height * kboot_params.pixels_per_scanline; i++) {
-            kboot_params.framebuffer[i] = 0x00000000;
+            kboot_params.framebuffer[i] = clear_color;
         }
     }
 }
