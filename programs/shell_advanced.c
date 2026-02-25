@@ -266,6 +266,56 @@ static void cmd_run(const char* args) {
     print(prog);
     print("\n");
 
+    /* If this is an APL script (simple text script), run lines as shell commands */
+    uint64 plen = 0; while (prog[plen]) plen++;
+    if (plen > 4 && prog[plen-4]=='.' && prog[plen-3]=='a' && prog[plen-2]=='p' && prog[plen-1]=='l') {
+        /* read script into buffer (limit 64KB) */
+        uint64 max_script = 64*1024;
+        void* sbuf = alloc(max_script);
+        if (!sbuf) {
+            print("Error: cannot allocate script buffer\n");
+            return;
+        }
+        int ssz = fread(prog, sbuf, max_script);
+        if (ssz <= 0) {
+            print("Error: cannot read script file\n");
+            free(sbuf);
+            return;
+        }
+
+        /* Ensure zero-termination within read size */
+        if (ssz < (int)max_script) ((char*)sbuf)[ssz] = 0;
+
+        /* Execute each non-empty line as a shell command */
+        char* pcur = (char*)sbuf;
+        while (*pcur) {
+            /* Find end of line */
+            char* eol = pcur;
+            while (*eol && *eol != '\n' && *eol != '\r') eol++;
+            char saved = *eol;
+            *eol = 0;
+            /* Trim leading spaces */
+            char* line = pcur;
+            while (*line == ' ') line++;
+            /* Trim trailing spaces */
+            char* t = eol - 1;
+            while (t >= line && (*t == ' ' || *t == '\t')) { *t = 0; t--; }
+
+            if (*line) {
+                parse_and_execute(line);
+            }
+
+            if (saved == 0) break;
+            /* restore and advance */
+            *eol = saved;
+            pcur = eol + 1;
+            while (*pcur == '\n' || *pcur == '\r') pcur++;
+        }
+
+        free(sbuf);
+        return;
+    }
+
     /* Read small header first to validate format */
     typedef struct {
         char magic[4];
