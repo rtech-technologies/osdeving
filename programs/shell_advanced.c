@@ -236,9 +236,107 @@ static void cmd_run(const char* args) {
         print("Available: shell.bin, custom programs\n");
         return;
     }
+
+    /* Parse program name and arguments (simple split by spaces) */
+    char prog[64];
+    char tokbuf[16][64];
+    char* argv_local[17];
+    int argc = 0;
+    uint64 i = 0, j = 0, p = 0;
+
+    /* extract first token = program */
+    while (i < 63 && args[i] && args[i] != ' ') { prog[i] = args[i]; i++; }
+    prog[i] = 0;
+
+    /* extract remaining args into tokbuf */
+    while (args[i] == ' ') i++;
+    while (args[i] && argc < 16) {
+        j = 0;
+        while (j < 63 && args[i] && args[i] != ' ') {
+            tokbuf[argc][j++] = args[i++];
+        }
+        tokbuf[argc][j] = 0;
+        argv_local[argc] = tokbuf[argc];
+        argc++;
+        while (args[i] == ' ') i++;
+    }
+    argv_local[argc] = NULL;
+
     print("Running: ");
-    print(args);
-    print(" (not yet implemented - requires process context)\n");
+    print(prog);
+    print("\n");
+
+    /* Read small header first to validate format */
+    typedef struct {
+        char magic[4];
+        uint32 entry_offset;
+        uint32 init_offset;
+        uint32 image_size;
+        uint32 reserved;
+    } rsl_header_t;
+
+    rsl_header_t hdr;
+    int got = fread(prog, (void*)&hdr, sizeof(rsl_header_t));
+    if (got < (int)sizeof(rsl_header_t)) {
+        print("Error: cannot read program header\n");
+        return;
+    }
+    if (hdr.magic[0] != 'R' || hdr.magic[1] != 'S' || hdr.magic[2] != 'L' || hdr.magic[3] != '\0') {
+        print("Error: invalid program format (expect RSL)\n");
+        return;
+    }
+
+    if (hdr.image_size == 0) {
+        print("Error: program reports zero image size\n");
+        return;
+    }
+
+    /* Allocate memory for program image and read it entirely */
+    void* img = alloc(hdr.image_size);
+    if (!img) {
+        print("Error: cannot allocate memory for program\n");
+        return;
+    }
+
+    int r = fread(prog, img, hdr.image_size);
+    if (r <= 0) {
+        print("Error: failed to read program contents\n");
+        free(img);
+        return;
+    }
+
+    /* Entry pointer is base + entry_offset */
+    void* entry_ptr = (void*)((char*)img + hdr.entry_offset);
+
+    /* Call init if present */
+    if (hdr.init_offset != 0) {
+        void (*init_fn)(int, char**) = (void(*)(int,char**))((char*)img + hdr.init_offset);
+        init_fn(argc, argv_local);
+    }
+
+    /* Call entry: convention int entry(int argc, char** argv) */
+    int (*prog_entry)(int, char**) = (int(*)(int,char**))entry_ptr;
+    int exit_code = prog_entry(argc, argv_local);
+
+    /* Cleanup */
+    free(img);
+
+    /* Note: currently calling `exit()` from a program will call kernel exit (shuts kernel).
+       Programs should return from their entry point to allow loader cleanup. */
+    print("Program exited with code: ");
+    {
+        char buf[16];
+        int v = exit_code; int pos = 0;
+        if (v == 0) { buf[pos++] = '0'; }
+        else {
+            char rev[16]; int rp = 0;
+            while (v > 0 && rp < 15) { rev[rp++] = '0' + (v % 10); v /= 10; }
+            while (rp--) buf[pos++] = rev[rp];
+        }
+        buf[pos] = 0;
+        print(buf);
+    }
+    print("\n");
 }
 
 /* ============ MAIN LOOP ============ */
