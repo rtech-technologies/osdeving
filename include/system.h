@@ -3,6 +3,23 @@
 
 #include "types.h"
 
+/* Freestanding Boot Parameters */
+typedef struct {
+    uint32* framebuffer;
+    uint32  width;
+    uint32  height;
+    uint32  pixels_per_scanline;
+
+    void*   ramdisk_base;
+    uint64  ramdisk_size;
+
+    void*   heap_base;
+    uint64  heap_size;
+
+    void*   SystemTable; /* Opaque in user-space */
+    void*   ImageHandle; /* Opaque in user-space */
+} boot_params_t;
+
 /* Public API for programs */
 void print(const char* str);
 void input(const char* prompt, char* buffer, uint64 size);

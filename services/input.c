@@ -17,29 +17,26 @@ static const char scancode_map[128] = {
     0,	/* Alt */
   ' ',	/* Space bar */
     0,	/* Caps lock */
-    0,	/* 59 - F1 key ... > */
-    0,   0,   0,   0,   0,   0,   0,   0,
-    0,	/* < ... F10 */
-    0,	/* 69 - Num lock*/
-    0,	/* Scroll Lock */
-    0,	/* Home key */
-    0,	/* Up Arrow */
-    0,	/* Page Up */
-  '-',
-    0,	/* Left Arrow */
-    0,
-    0,	/* Right Arrow */
-  '+',
-    0,	/* 79 - End key*/
-    0,	/* Down Arrow */
-    0,	/* Page Down */
-    0,	/* Insert Key */
-    0,	/* Delete Key */
-    0,   0,   0,
-    0,	/* F11 Key */
-    0,	/* F12 Key */
-    0,	/* All other keys are undefined */
 };
+
+static const char shift_map[128] = {
+    0,  27, '!', '@', '#', '$', '%', '^', '&', '*',	/* 9 */
+  '(', ')', '_', '+', '\b',	/* Backspace */
+  '\t',			/* Tab */
+  'Q', 'W', 'E', 'R',	/* 19 */
+  'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n',	/* Enter key */
+    0,			/* 29   - Control */
+  'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':',	/* 39 */
+ '\"', '~',   0,		/* Left shift */
+ '|', 'Z', 'X', 'C', 'V', 'B', 'N',			/* 49 */
+  'M', '<', '>', '?',   0,				/* Right shift */
+  '*',
+    0,	/* Alt */
+  ' ',	/* Space bar */
+    0,	/* Caps lock */
+};
+
+static int shift_pressed = 0;
 
 static void ps2_wait_write() {
     while (inb(0x64) & 2);
@@ -50,26 +47,26 @@ static void ps2_wait_read() {
 }
 
 void input_init() {
-    /* 10-step initialization sequence (simplified but robust) */
+    shift_pressed = 0;
 
     /* 1. Disable devices */
     ps2_wait_write();
-    outb(0x64, 0xAD); /* Disable P1 */
+    outb(0x64, 0xAD);
     ps2_wait_write();
-    outb(0x64, 0xA7); /* Disable P2 */
+    outb(0x64, 0xA7);
 
     /* 2. Flush buffer */
     while (inb(0x64) & 1) inb(0x60);
 
     /* 3. Set Controller Config */
     ps2_wait_write();
-    outb(0x64, 0x20); /* Read CCB */
+    outb(0x64, 0x20);
     ps2_wait_read();
     uint8 ccb = inb(0x60);
-    ccb |= 1; /* Enable P1 interrupts (though we poll) */
-    ccb &= ~0x40; /* Disable translation */
+    ccb |= 1;
+    ccb &= ~0x40;
     ps2_wait_write();
-    outb(0x64, 0x60); /* Write CCB */
+    outb(0x64, 0x60);
     ps2_wait_write();
     outb(0x60, ccb);
 
@@ -87,24 +84,34 @@ void input_init() {
     ps2_wait_write();
     outb(0x60, 0xFF);
     ps2_wait_read();
-    if (inb(0x60) != 0xFA) return; /* ACK */
+    if (inb(0x60) != 0xFA) return;
     ps2_wait_read();
-    if (inb(0x60) != 0xAA) return; /* Success */
+    if (inb(0x60) != 0xAA) return;
 
     /* 7. Enable Scanning */
     ps2_wait_write();
     outb(0x60, 0xF4);
     ps2_wait_read();
-    inb(0x60); /* Flush ACK */
+    inb(0x60);
 }
 
 static char get_char() {
     while (1) {
         if (inb(0x64) & 1) {
             uint8 scancode = inb(0x60);
+
+            if (scancode == 0x2A || scancode == 0x36) {
+                shift_pressed = 1;
+                continue;
+            }
+            if (scancode == 0xAA || scancode == 0xB6) {
+                shift_pressed = 0;
+                continue;
+            }
+
             if (!(scancode & 0x80)) {
                 if (scancode < 128) {
-                    return scancode_map[scancode];
+                    return shift_pressed ? shift_map[scancode] : scancode_map[scancode];
                 }
             }
         }
@@ -113,14 +120,8 @@ static char get_char() {
 }
 
 void input(const char* prompt, char* buffer, uint64 size) {
-    if (!buffer || size == 0) return;
-    
     print(prompt);
     uint64 i = 0;
-    
-    /* Initialize buffer to zeros */
-    for (uint64 j = 0; j < size; j++) buffer[j] = 0;
-    
     while (i < size - 1) {
         char c = get_char();
         if (c == '\n') {
@@ -129,7 +130,6 @@ void input(const char* prompt, char* buffer, uint64 size) {
         } else if (c == '\b') {
             if (i > 0) {
                 i--;
-                buffer[i] = 0;
                 print("\b \b");
             }
         } else if (c > 0) {
