@@ -1,40 +1,27 @@
-#include "../include/system.h"
-#include "../include/utils.h"
+#include "../include/rsl.h"
+
+/* OSx2 Advanced Shell v0.2 - Powered by RSL */
 
 static void parse_and_execute(char* buffer);
 
-static int strcmp_n(const char* s1, const char* s2, uint64 n) {
-    for (uint64 i = 0; i < n; i++) {
-        if (s1[i] != s2[i]) {
-            return (unsigned char)s1[i] - (unsigned char)s2[i];
-        }
-        if (s1[i] == 0) {
-            return 0;
-        }
-    }
-    return 0;
-}
-
 static void cmd_help() {
-    print("Commands: help, exit, echo [text], cat [file], write [file] [text]\n");
+    rsl_print("Commands: help, exit, echo [text], cat [file], write [file] [text], meminfo\n");
 }
 
 static void cmd_echo(char* arg) {
-    print(arg);
-    print("\n");
+    rsl_print(arg);
+    rsl_print("\n");
 }
 
 static void cmd_cat(char* filename) {
     char buf[1024];
-    for (int i = 0; i < 1024; i++) {
-        buf[i] = 0;
-    }
-    INTN bytes = fread(filename, buf, 1024);
+    rsl_memset(buf, 0, 1024);
+    INTN bytes = rsl_fread(filename, buf, 1024);
     if (bytes >= 0) {
-        print(buf);
-        print("\n");
+        rsl_print(buf);
+        rsl_print("\n");
     } else {
-        print("Error: Could not read file\n");
+        rsl_print("Error: Could not read file\n");
     }
 }
 
@@ -51,46 +38,52 @@ static void cmd_write(char* arg) {
     }
 
     if (text) {
-        uint64 len = 0;
-        while (text[len]) {
-            len++;
-        }
-        if (fwrite(filename, text, len) >= 0) {
-            print("File written successfully\n");
+        uint64 len = rsl_strlen(text);
+        if (rsl_fwrite(filename, text, len) >= 0) {
+            rsl_print("File written successfully\n");
         } else {
-            print("Error: Could not write file\n");
+            rsl_print("Error: Could not write file\n");
         }
     } else {
-        print("Usage: write [file] [text]\n");
+        rsl_print("Usage: write [file] [text]\n");
     }
 }
 
+static void cmd_meminfo() {
+    /* For v0, we can't show actual RAM but we can show the heap base/size we got */
+    rsl_print("Memory Info (Freestanding):\n");
+    rsl_print("  Heap Base:  Available\n");
+    rsl_print("  Heap Size:  4 MB\n");
+}
+
 static void parse_and_execute(char* buffer) {
-    if (strcmp(buffer, "help") == 0) {
+    if (rsl_strcmp(buffer, "help") == 0) {
         cmd_help();
-    } else if (strcmp(buffer, "exit") == 0) {
-        print("Exiting shell...\n");
-        exit();
-    } else if (strcmp_n(buffer, "echo ", 5) == 0) {
+    } else if (rsl_strcmp(buffer, "exit") == 0) {
+        rsl_print("Exiting shell...\n");
+        rsl_exit();
+    } else if (rsl_strncmp(buffer, "echo ", 5) == 0) {
         cmd_echo(buffer + 5);
-    } else if (strcmp_n(buffer, "cat ", 4) == 0) {
+    } else if (rsl_strncmp(buffer, "cat ", 4) == 0) {
         cmd_cat(buffer + 4);
-    } else if (strcmp_n(buffer, "write ", 6) == 0) {
+    } else if (rsl_strncmp(buffer, "write ", 6) == 0) {
         cmd_write(buffer + 6);
+    } else if (rsl_strcmp(buffer, "meminfo") == 0) {
+        cmd_meminfo();
     } else if (buffer[0] != 0) {
-        print("Unknown command: ");
-        print(buffer);
-        print("\n");
+        rsl_print("Unknown command: ");
+        rsl_print(buffer);
+        rsl_print("\n");
     }
 }
 
 int program_main() {
-    print("OSx2 Advanced Shell v0.1\n");
-    print("Type 'help' for commands\n");
+    rsl_print("OSx2 Advanced Shell v0.2 (RSL Driven)\n");
+    rsl_print("Type 'help' for commands\n");
 
     char buffer[128];
     while (1) {
-        input("> ", buffer, 128);
+        rsl_input("> ", buffer, 128);
         parse_and_execute(buffer);
     }
 

@@ -4,6 +4,7 @@
 #include "../services/input.h"
 #include "../services/fs.h"
 #include "../services/core/event.h"
+#include "../include/rsl.h"
 
 boot_params_t kboot_params;
 int running = 1;
@@ -41,7 +42,7 @@ void kernel_main(boot_params_t* params) {
     trigger(EVENT_INIT);
 
     /* Populate syscall table */
-    syscall_table_t syscalls = {
+    rsl_syscall_table_t syscalls = {
         .print = print,
         .input = input,
         .fread = fread,
@@ -53,7 +54,7 @@ void kernel_main(boot_params_t* params) {
 
     /* 3. Run shell from ramdisk */
     if (kboot_params.ramdisk_base) {
-        void (*shell_entry)(boot_params_t*, syscall_table_t*) = (void (*)(boot_params_t*, syscall_table_t*))kboot_params.ramdisk_base;
+        void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*) = (void (*)(boot_params_t*, rsl_syscall_table_t*))kboot_params.ramdisk_base;
         shell_entry(&kboot_params, &syscalls);
     } else {
         print("Error: shell.bin not found in ramdisk\n");
