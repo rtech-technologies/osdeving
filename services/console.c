@@ -18,6 +18,10 @@ void console_init() {
     }
 }
 
+void console_clear() {
+    console_init();
+}
+
 static void scroll() {
     if (!kboot_params.framebuffer) return;
 

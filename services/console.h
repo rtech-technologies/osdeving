@@ -4,6 +4,7 @@
 #include "../kernel/kernel.h"
 
 void console_init();
+void console_clear();
 void print(const char* str);
 
 #endif

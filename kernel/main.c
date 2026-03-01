@@ -51,7 +51,8 @@ void kernel_main(boot_params_t* params) {
         .alloc = alloc,
         .retain = retain,
         .release = release,
-        .exit = exit_kernel
+        .exit = exit_kernel,
+        .clear = console_clear
     };
 
     /* Hand off to loader */

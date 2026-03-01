@@ -8,13 +8,17 @@ void memory_init() {
 }
 
 void* alloc(uint64 size) {
-    if (!kboot_params.heap_base) return NULL;
+    if (!kboot_params.heap_base) {
+        return (void*)0;
+    }
 
     /* Total size = ARC header + payload + alignment */
     uint64 total_size = sizeof(arc_header_t) + size;
     total_size = (total_size + 15) & ~15;
 
-    if (heap_ptr + total_size > kboot_params.heap_size) return NULL;
+    if (heap_ptr + total_size > kboot_params.heap_size) {
+        return (void*)0;
+    }
 
     arc_header_t* header = (arc_header_t*)((uint8*)kboot_params.heap_base + heap_ptr);
     header->ref_count = 1;
@@ -27,7 +31,9 @@ void* alloc(uint64 size) {
 }
 
 void retain(void* ptr) {
-    if (!ptr) return;
+    if (!ptr) {
+        return;
+    }
     arc_header_t* header = (arc_header_t*)ptr - 1;
     if (header->magic == ARC_MAGIC) {
         header->ref_count++;
@@ -35,14 +41,16 @@ void retain(void* ptr) {
 }
 
 void release(void* ptr) {
-    if (!ptr) return;
+    if (!ptr) {
+        return;
+    }
     arc_header_t* header = (arc_header_t*)ptr - 1;
     if (header->magic == ARC_MAGIC) {
         if (header->ref_count > 0) {
             header->ref_count--;
             if (header->ref_count == 0) {
-                /* Python-like cleanup: In a real system, we'd add to free list.
-                   For v0 expert bump, we just mark it as dead. */
+                /* In this simple version, we don't reclaim memory,
+                   but we invalidate the magic. */
                 header->magic = 0;
             }
         }

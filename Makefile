@@ -43,7 +43,7 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 # Shell Source Files
 # libsystem.o must be first for entry point at 0x0
-SHELL_SRCS = programs/libsystem.c programs/shell_advanced.c
+SHELL_SRCS = programs/libsystem.c programs/shell.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 
 # Header files for dependency tracking
