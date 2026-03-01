@@ -36,6 +36,7 @@ KERNEL_SRCS = kernel/entry.c \
               services/memory.c \
               services/fs.c \
               services/rnafs.c \
+              services/loader.c \
               services/core/event.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)

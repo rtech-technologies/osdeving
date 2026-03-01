@@ -3,8 +3,8 @@
 #include "../services/memory.h"
 #include "../services/input.h"
 #include "../services/fs.h"
+#include "../services/loader.h"
 #include "../services/core/event.h"
-#include "../include/rsl.h"
 
 boot_params_t kboot_params;
 int running = 1;
@@ -26,41 +26,38 @@ void exit_kernel() {
 void kernel_main(boot_params_t* params) {
     kboot_params = *params;
 
-    /* 1. Register Services */
+    /* Ritual: Register Services */
     register_service(console_init);
     register_service(memory_init);
     register_service(input_init);
     register_service(fs_init);
+    register_service(loader_init);
 
-    /* 2. Initialize Services */
+    /* Initialize Services */
     for (uint32 i = 0; i < service_count; i++) {
         registered_services[i]();
     }
 
-    print("Kernel started (Freestanding mode)\n");
+    print("Kernel started (Expert Python-like ARC mode)\n");
 
     trigger(EVENT_INIT);
 
-    /* Populate syscall table */
+    /* Populate Syscall Table */
     rsl_syscall_table_t syscalls = {
         .print = print,
         .input = input,
         .fread = fread,
         .fwrite = fwrite,
         .alloc = alloc,
-        .free = free,
+        .retain = retain,
+        .release = release,
         .exit = exit_kernel
     };
 
-    /* 3. Run shell from ramdisk */
-    if (kboot_params.ramdisk_base) {
-        void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*) = (void (*)(boot_params_t*, rsl_syscall_table_t*))kboot_params.ramdisk_base;
-        shell_entry(&kboot_params, &syscalls);
-    } else {
-        print("Error: shell.bin not found in ramdisk\n");
-    }
+    /* Hand off to loader */
+    loader_run_shell(&syscalls);
 
-    /* 4. Event Loop */
+    /* Event Loop */
     while (running) {
         trigger(EVENT_MAIN);
     }

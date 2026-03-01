@@ -28,24 +28,26 @@ typedef struct {
     INTN (*fread)(const char*, void*, uint64);
     INTN (*fwrite)(const char*, const void*, uint64);
     void* (*alloc)(uint64);
-    void (*free)(void*);
+    void (*retain)(void*);
+    void (*release)(void*);
     void (*exit)();
 } rsl_syscall_table_t;
 
-/* Public API (RSL Functions) */
-void rsl_print(const char* str);
-void rsl_input(const char* prompt, char* buffer, uint64 size);
-INTN rsl_fread(const char* path, void* buffer, uint64 max_size);
-INTN rsl_fwrite(const char* path, const void* buffer, uint64 size);
-void* rsl_alloc(uint64 size);
-void rsl_free(void* ptr);
-void rsl_exit();
+/* Public API (RSL Functions - System Language) */
+void print(const char* str);
+void input(const char* prompt, char* buffer, uint64 size);
+INTN fread(const char* path, void* buffer, uint64 max_size);
+INTN fwrite(const char* path, const void* buffer, uint64 size);
+void* alloc(uint64 size);
+void retain(void* ptr);
+void release(void* ptr);
+void exit();
 
-/* RSL Utility Functions */
-int  rsl_strcmp(const char* s1, const char* s2);
-int  rsl_strncmp(const char* s1, const char* s2, uint64 n);
-void rsl_memcpy(void* dst, const void* src, uint64 n);
-void rsl_memset(void* s, int c, uint64 n);
-uint64 rsl_strlen(const char* s);
+/* Utility Functions */
+int    strcmp(const char* s1, const char* s2);
+int    strncmp(const char* s1, const char* s2, uint64 n);
+void   memcpy(void* dst, const void* src, uint64 n);
+void   memset(void* s, int c, uint64 n);
+uint64 strlen(const char* s);
 
 #endif
