@@ -1,5 +1,5 @@
 #include "memory.h"
-#include "../kernel/kernel.h"
+#include "../unice64/kernel.h"
 
 static uint64 heap_ptr = 0;
 

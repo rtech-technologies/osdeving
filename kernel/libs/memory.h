@@ -1,7 +1,7 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
-#include "../include/types.h"
+#include "../../include/types.h"
 
 /* ARC Header for Python-like memory management */
 typedef struct {

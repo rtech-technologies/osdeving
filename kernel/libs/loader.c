@@ -1,6 +1,6 @@
 #include "loader.h"
 #include "console.h"
-#include "../kernel/kernel.h"
+#include "../unice64/kernel.h"
 
 void loader_init() {
     /* No-op init */

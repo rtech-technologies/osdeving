@@ -1,10 +1,11 @@
 #include "kernel.h"
-#include "../services/console.h"
-#include "../services/memory.h"
-#include "../services/input.h"
-#include "../services/fs.h"
-#include "../services/loader.h"
-#include "../services/core/event.h"
+#include "../libs/console.h"
+#include "../libs/memory.h"
+#include "../libs/input.h"
+#include "../libs/fs.h"
+#include "../libs/loader.h"
+#include "../libs/core/event.h"
+#include "../../include/rsl.h"
 
 boot_params_t kboot_params;
 int running = 1;

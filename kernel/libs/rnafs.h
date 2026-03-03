@@ -1,7 +1,7 @@
 #ifndef RNAFS_H
 #define RNAFS_H
 
-#include "../include/types.h"
+#include "../../include/types.h"
 
 /* RNAFS v1 Structure */
 #define RNAFS_MAGIC 0x5346414E52 /* "RNAFS" */

@@ -1,7 +1,7 @@
 #ifndef CONSOLE_H
 #define CONSOLE_H
 
-#include "../kernel/kernel.h"
+#include "../unice64/kernel.h"
 
 void console_init();
 void console_clear();

@@ -7,6 +7,8 @@ OBJCOPY = objcopy
 # Paths
 BOOT_DIR = boot
 EFI_DIR = $(BOOT_DIR)/EFI/BOOT
+KERNEL_DIR = kernel/unice64
+LIBS_DIR = kernel/libs
 
 # Paths for EFI build (standard on Debian/Ubuntu)
 EFI_LIB = /usr/lib
@@ -28,26 +30,25 @@ LDFLAGS_BIN = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
 LIBS = -lefi -lgnuefi
 
 # Kernel Source Files
-KERNEL_SRCS = kernel/entry.c \
-              kernel/main.c \
-              services/console.c \
-              services/font_data.c \
-              services/input.c \
-              services/memory.c \
-              services/fs.c \
-              services/rnafs.c \
-              services/loader.c \
-              services/core/event.c
+KERNEL_SRCS = $(KERNEL_DIR)/entry.c \
+              $(KERNEL_DIR)/main.c \
+              $(LIBS_DIR)/console.c \
+              $(LIBS_DIR)/font_data.c \
+              $(LIBS_DIR)/input.c \
+              $(LIBS_DIR)/memory.c \
+              $(LIBS_DIR)/fs.c \
+              $(LIBS_DIR)/rnafs.c \
+              $(LIBS_DIR)/loader.c \
+              $(LIBS_DIR)/core/event.c
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
 # Shell Source Files
-# libsystem.o must be first for entry point at 0x0
 SHELL_SRCS = programs/libsystem.c programs/shell.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 
 # Header files for dependency tracking
-HEADERS = $(shell find include kernel services -name "*.h")
+HEADERS = $(shell find include kernel -name "*.h")
 
 # Default Target
 all: $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin

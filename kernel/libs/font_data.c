@@ -1,4 +1,4 @@
-#include "../include/types.h"
+#include "../../include/types.h"
 
 const uint8 font8x8_basic[128][8] = {
     [0x00] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, /* (null) */

@@ -1,7 +1,7 @@
 #include "console.h"
 #include "font.h"
-#include "../kernel/kernel.h"
-#include "../include/rsl.h"
+#include "../unice64/kernel.h"
+#include "../../include/rsl.h"
 
 static uint32 cursor_x = 0;
 static uint32 cursor_y = 0;

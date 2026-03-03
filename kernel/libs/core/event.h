@@ -1,7 +1,7 @@
 #ifndef EVENT_H
 #define EVENT_H
 
-#include "../../kernel/kernel.h"
+#include "../../unice64/kernel.h"
 
 void event_init();
 

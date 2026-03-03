@@ -1,6 +1,6 @@
 #include "rnafs.h"
-#include "../kernel/kernel.h"
-#include "../include/rsl.h"
+#include "../unice64/kernel.h"
+#include "../../include/rsl.h"
 
 static rnafs_superblock_t* sb = 0;
 
