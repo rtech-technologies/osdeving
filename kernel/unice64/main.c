@@ -53,7 +53,8 @@ void kernel_main(boot_params_t* params) {
         .retain = retain,
         .release = release,
         .exit = exit_kernel,
-        .clear = console_clear
+        .clear = console_clear,
+        .set_color = console_set_color
     };
 
     /* Hand off to loader */

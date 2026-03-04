@@ -2,7 +2,7 @@
 
 /* RTECH Standard Library (RSL) Implementation */
 
-static rsl_syscall_table_t* g_syscalls = NULL;
+static rsl_syscall_table_t* g_syscalls = (void*)0;
 boot_params_t kboot_params;
 
 int program_main();
@@ -58,11 +58,30 @@ void quit() {
     }
 }
 
-/* --- High-Level "Python-like" API Implementation --- */
+void color(uint32 fg, uint32 bg) {
+    if (g_syscalls && g_syscalls->set_color) {
+        g_syscalls->set_color(fg, bg);
+    }
+}
+
+/* --- Auto-RAM: Simplified API --- */
+
+void* auto_ram(uint64 size) {
+    /* Everything in RSL is managed by ARC by default */
+    return alloc(size);
+}
+
+char* str_create(const char* init) {
+    uint64 len = strlen(init);
+    char* s = (char*)auto_ram(len + 1);
+    if (s) {
+        strcpy(s, init);
+    }
+    return s;
+}
 
 char* readline(const char* prompt) {
-    /* Auto-allocate buffer for the noob, managed by ARC */
-    char* buf = (char*)alloc(128);
+    char* buf = (char*)auto_ram(128);
     if (!buf) return (void*)0;
 
     if (g_syscalls && g_syscalls->input) {
@@ -71,10 +90,7 @@ char* readline(const char* prompt) {
     return buf;
 }
 
-void* py_alloc(uint64 size) { return alloc(size); }
-void  py_free(void* ptr) { release(ptr); }
-
-/* --- String Utilities --- */
+/* --- Utilities --- */
 
 int strcmp(const char* s1, const char* s2) {
     while (*s1 && *s1 == *s2) { s1++; s2++; }
@@ -99,11 +115,6 @@ void strncpy(char* dst, const char* src, uint64 n) {
     for (; i < n; i++) dst[i] = '\0';
 }
 
-void strcat(char* dst, const char* src) {
-    while (*dst) dst++;
-    while ((*dst++ = *src++));
-}
-
 uint64 strlen(const char* s) {
     uint64 n = 0;
     while (s[n]) n++;
@@ -117,8 +128,6 @@ char* strchr(const char* s, int c) {
     return (char*)s;
 }
 
-/* --- Memory Utilities --- */
-
 void memcpy(void* dst, const void* src, uint64 n) {
     uint8* d = (uint8*)dst;
     const uint8* s = (const uint8*)src;
@@ -128,42 +137,6 @@ void memcpy(void* dst, const void* src, uint64 n) {
 void memset(void* s, int c, uint64 n) {
     uint8* p = (uint8*)s;
     while (n--) *p++ = (uint8)c;
-}
-
-/* --- Numeric Utilities --- */
-
-int atoi(const char* s) {
-    int res = 0;
-    int sign = 1;
-    if (*s == '-') { sign = -1; s++; }
-    while (*s >= '0' && *s <= '9') {
-        res = res * 10 + (*s - '0');
-        s++;
-    }
-    return res * sign;
-}
-
-void itoa(int n, char* s, int base) {
-    char* p = s;
-    char* p1, *p2;
-    unsigned int ud = n;
-    if (base == 10 && n < 0) {
-        *p++ = '-';
-        s++;
-        ud = -n;
-    }
-    do {
-        int remainder = ud % base;
-        *p++ = (remainder < 10) ? remainder + '0' : remainder + 'a' - 10;
-    } while (ud /= base);
-    *p = 0;
-    p1 = s;
-    p2 = p - 1;
-    while (p1 < p2) {
-        char tmp = *p1;
-        *p1++ = *p2;
-        *p2-- = tmp;
-    }
 }
 
 void _start(boot_params_t* params, rsl_syscall_table_t* syscalls) {

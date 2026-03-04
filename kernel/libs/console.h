@@ -5,6 +5,7 @@
 
 void console_init();
 void console_clear();
+void console_set_color(uint32 fg, uint32 bg);
 void print(const char* str);
 
 #endif

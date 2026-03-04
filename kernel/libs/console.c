@@ -5,6 +5,8 @@
 
 static uint32 cursor_x = 0;
 static uint32 cursor_y = 0;
+static uint32 fg_color = 0xFFFFFFFF;
+static uint32 bg_color = 0x00000000;
 
 void console_init() {
     cursor_x = 0;
@@ -13,7 +15,7 @@ void console_init() {
     /* Clear screen */
     if (kboot_params.framebuffer) {
         for (uint32 i = 0; i < kboot_params.height * kboot_params.pixels_per_scanline; i++) {
-            kboot_params.framebuffer[i] = 0x00000000;
+            kboot_params.framebuffer[i] = bg_color;
         }
     }
 }
@@ -22,13 +24,16 @@ void console_clear() {
     console_init();
 }
 
+void console_set_color(uint32 fg, uint32 bg) {
+    fg_color = fg;
+    bg_color = bg;
+}
+
 static void scroll() {
     if (!kboot_params.framebuffer) return;
 
-    uint32 row_size = kboot_params.pixels_per_scanline * 4; /* 4 bytes per pixel */
+    uint32 row_size = kboot_params.pixels_per_scanline * 4;
     uint32 total_rows = kboot_params.height;
-
-    /* Move everything up by 10 pixels (font height + padding) */
     uint32 scroll_amount = 10;
 
     for (uint32 y = 0; y < total_rows - scroll_amount; y++) {
@@ -37,10 +42,10 @@ static void scroll() {
                row_size);
     }
 
-    /* Clear last 10 pixels */
+    /* Clear last row with BG color */
     for (uint32 y = total_rows - scroll_amount; y < total_rows; y++) {
         for (uint32 x = 0; x < kboot_params.pixels_per_scanline; x++) {
-            kboot_params.framebuffer[y * kboot_params.pixels_per_scanline + x] = 0;
+            kboot_params.framebuffer[y * kboot_params.pixels_per_scanline + x] = bg_color;
         }
     }
 
@@ -75,10 +80,10 @@ void print(const char* str) {
         } else if (*str == '\b') {
             if (cursor_x >= 8) {
                 cursor_x -= 8;
-                draw_char(' ', cursor_x, cursor_y, 0);
+                draw_char(' ', cursor_x, cursor_y, bg_color);
             }
         } else {
-            draw_char(*str, cursor_x, cursor_y, 0xFFFFFFFF);
+            draw_char(*str, cursor_x, cursor_y, fg_color);
             cursor_x += 8;
             if (cursor_x + 8 > kboot_params.width) {
                 cursor_x = 0;

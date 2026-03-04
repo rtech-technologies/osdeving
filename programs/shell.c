@@ -2,26 +2,29 @@
 
 /*
  * OSx2 Standard Shell
- * Driving OSx2 (RTECH dos) via RSL (RTECH Standard Library).
+ * Powering RTECH dos via the RSL (RTECH Standard Library).
  *
- * To add a new command, just add a new 'else if' in handle_command().
- * RSL handles the memory for you with Python-like ARC.
+ * This shell is designed to be easy for experts and noobs.
+ * Add new commands in handle_command().
  */
 
 static void handle_command(char* cmd);
 
 int program_main() {
-    print("OSx2 (RTECH dos) - Ready.\n");
-    print("System Language: RSL (Python-like Memory)\n");
+    clear();
+    color(0x00FF88, 0x000000); /* Pro Emerald Green */
+    print("OSx2 (RTECH dos) - Kernel Expert Mode\n");
+    print("RSL Standard Library v1.0 - ARC Memory Enabled\n\n");
 
     while (1) {
-        /* readline() automatically allocates memory for you. */
+        /* Auto-RAM: readline handles allocation automatically */
         char* input_str = readline("> ");
 
         if (input_str) {
             handle_command(input_str);
 
-            /* Release the memory when done - ARC takes care of it. */
+            /* Manual Release (ARC): optional for experts,
+               but good practice for large strings. */
             release(input_str);
         }
     }
@@ -31,9 +34,9 @@ int program_main() {
 
 static void handle_command(char* cmd) {
     if (strcmp(cmd, "help") == 0) {
-        print("Commands: help, echo [text], cat [file], write [file] [text], clear, exit\n");
+        print("Commands: help, echo [text], cat [file], write [file] [text], color [hex], clear, exit\n");
     } else if (strcmp(cmd, "exit") == 0) {
-        print("System shutdown.\n");
+        print("System shutdown requested.\n");
         quit();
     } else if (strcmp(cmd, "clear") == 0) {
         clear();
@@ -42,8 +45,8 @@ static void handle_command(char* cmd) {
         print("\n");
     } else if (strncmp(cmd, "cat ", 4) == 0) {
         char* filename = cmd + 4;
-        /* Using alloc() for a temporary buffer. */
-        char* buf = (char*)alloc(1024);
+        /* Using auto_ram for a temporary buffer */
+        char* buf = (char*)auto_ram(1024);
         if (buf) {
             memset(buf, 0, 1024);
             if (read_file(filename, buf, 1024) >= 0) {
@@ -54,20 +57,10 @@ static void handle_command(char* cmd) {
             }
             release(buf);
         }
-    } else if (strncmp(cmd, "write ", 6) == 0) {
-        char* arg = cmd + 6;
-        char* text = strchr(arg, ' ');
-        if (text) {
-            *text = 0; /* Split filename and text */
-            text++;
-            if (write_file(arg, text, strlen(text)) >= 0) {
-                print("File written successfully.\n");
-            } else {
-                print("Error: Could not write file.\n");
-            }
-        } else {
-            print("Usage: write [file] [text]\n");
-        }
+    } else if (strncmp(cmd, "color ", 6) == 0) {
+        /* Reset to standard emerald green */
+        color(0x00FF88, 0x000000);
+        print("Colors reset to Emerald Green.\n");
     } else if (cmd[0] != 0) {
         print("Unknown command: ");
         print(cmd);
