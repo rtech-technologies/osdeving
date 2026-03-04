@@ -35,3 +35,6 @@
 - NO precompiled binaries or object files are allowed in the repository.
 - The system must be buildable from pure source using the provided `Makefile`.
 - `make all` produces the UEFI-bootable `BOOTX64.EFI` and the shell binary.
+
+## 7. Development Tools
+- `tools/fontgen.html`: A web-based utility to generate 8x8 font data for the console. Characters are stored as 8 bytes, where each byte represents a row and bits represent columns (bit 0 = left).

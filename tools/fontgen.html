@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSx2 Font Generator (.FNT)</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #eee; display: flex; flex-direction: column; align-items: center; }
+        .container { display: flex; gap: 20px; margin-top: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(8, 30px); grid-template-rows: repeat(8, 30px); border: 2px solid #555; }
+        .cell { width: 30px; height: 30px; border: 1px solid #444; cursor: pointer; }
+        .cell.active { background: #0f0; }
+        .controls { display: flex; flex-direction: column; gap: 10px; width: 300px; }
+        textarea { width: 100%; height: 150px; background: #333; color: #0f0; border: 1px solid #555; font-family: monospace; font-size: 12px; }
+        button { padding: 10px; cursor: pointer; background: #444; color: #fff; border: none; border-radius: 4px; }
+        button:hover { background: #555; }
+        select { padding: 5px; background: #333; color: #eee; border: 1px solid #555; }
+    </style>
+</head>
+<body>
+    <h1>OSx2 Font Generator</h1>
+    <p>Draw characters for your 8x8 font. Export as .FNT binary (1024 bytes) or C code.</p>
+
+    <div class="container">
+        <div>
+            <div class="grid" id="grid"></div>
+            <div style="margin-top: 10px; display: flex; justify-content: space-between;">
+                <button onclick="clearGrid()">Clear</button>
+                <button onclick="invertGrid()">Invert</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <label>Select Character (ASCII):</label>
+            <select id="charSelect" onchange="loadChar()">
+                <!-- Populated by JS -->
+            </select>
+
+            <button onclick="saveCurrentChar()">Save Character to Memory</button>
+            <hr>
+            <button onclick="exportBinary()">Download .FNT Binary</button>
+            <button onclick="exportC()">Generate C Array</button>
+            <textarea id="output" readonly placeholder="C code will appear here..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        const grid = document.getElementById('grid');
+        const charSelect = document.getElementById('charSelect');
+        const output = document.getElementById('output');
+
+        // Font memory: 128 characters, 8 bytes each
+        let fontData = new Uint8Array(128 * 8);
+
+        // Initialize grid
+        for (let i = 0; i < 64; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.onclick = () => cell.classList.toggle('active');
+            grid.appendChild(cell);
+        }
+
+        // Populate select
+        for (let i = 0; i < 128; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${i} (${String.fromCharCode(i) || 'special'})`;
+            if (i === 65) opt.selected = true; // Default to 'A'
+            charSelect.appendChild(opt);
+        }
+
+        function clearGrid() {
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('active'));
+        }
+
+        function invertGrid() {
+            document.querySelectorAll('.cell').forEach(c => c.classList.toggle('active'));
+        }
+
+        function getGridData() {
+            let bytes = new Uint8Array(8);
+            const cells = document.querySelectorAll('.cell');
+            for (let row = 0; row < 8; row++) {
+                let byte = 0;
+                for (let col = 0; col < 8; col++) {
+                    if (cells[row * 8 + col].classList.contains('active')) {
+                        byte |= (1 << col); // Standard bit order for my renderer
+                    }
+                }
+                bytes[row] = byte;
+            }
+            return bytes;
+        }
+
+        function setGridData(bytes) {
+            const cells = document.querySelectorAll('.cell');
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (bytes[row] & (1 << col)) {
+                        cells[row * 8 + col].classList.add('active');
+                    } else {
+                        cells[row * 8 + col].classList.remove('active');
+                    }
+                }
+            }
+        }
+
+        function saveCurrentChar() {
+            const charCode = parseInt(charSelect.value);
+            const bytes = getGridData();
+            for (let i = 0; i < 8; i++) {
+                fontData[charCode * 8 + i] = bytes[i];
+            }
+        }
+
+        function loadChar() {
+            const charCode = parseInt(charSelect.value);
+            const bytes = fontData.slice(charCode * 8, charCode * 8 + 8);
+            setGridData(bytes);
+        }
+
+        function exportBinary() {
+            saveCurrentChar();
+            const blob = new Blob([fontData], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'font.fnt';
+            a.click();
+        }
+
+        function exportC() {
+            saveCurrentChar();
+            let text = "const uint8 font8x8_custom[128][8] = {\n";
+            for (let i = 0; i < 128; i++) {
+                let bytes = [];
+                for (let j = 0; j < 8; j++) {
+                    bytes.push('0x' + fontData[i * 8 + j].toString(16).padStart(2, '0').toUpperCase());
+                }
+                text += `    [0x${i.toString(16).padStart(2, '0').toUpperCase()}] = { ${bytes.join(', ')} }, /* ${String.fromCharCode(i) || '?'} */\n`;
+            }
+            text += "};";
+            output.value = text;
+        }
+
+        loadChar();
+    </script>
+</body>
+</html>

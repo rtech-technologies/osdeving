@@ -50,7 +50,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
-    /* 3. Allocate Heap */
+    /* 3. Pre-allocate Heap */
     UINTN heap_size = 4 * 1024 * 1024;
     void* heap_base;
     if (SystemTable->BootServices->AllocatePool(2, heap_size, &heap_base) == EFI_SUCCESS) {
@@ -58,11 +58,24 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         params.heap_size = heap_size;
     }
 
-    params.SystemTable = SystemTable;
-    params.ImageHandle = ImageHandle;
+    /* 4. Exit Boot Services */
+    UINTN map_size = 0;
+    UINTN map_key = 0;
+    UINTN descriptor_size = 0;
+    uint32 descriptor_version = 0;
 
-    /* 4. Hand off to Kernel */
-    kernel_main(&params);
+    SystemTable->BootServices->GetMemoryMap(&map_size, NULL, &map_key, &descriptor_size, &descriptor_version);
+    map_size += 2 * descriptor_size;
+
+    void* map_buffer;
+    if (SystemTable->BootServices->AllocatePool(2, map_size, &map_buffer) == EFI_SUCCESS) {
+        if (SystemTable->BootServices->GetMemoryMap(&map_size, map_buffer, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
+            if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
+                /* Freestanding jump */
+                kernel_main(&params);
+            }
+        }
+    }
 
     while(1) { __asm__ volatile("hlt"); }
     return EFI_SUCCESS;
