@@ -97,10 +97,12 @@ kernel/libs/core/%.o: kernel/libs/core/%.c $(HEADERS)
 programs/%.o: programs/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# OS Disk Image Build
+# OS Disk Image Build (GPT Simulation)
 disk: all
 	dd if=/dev/zero of=disk.img bs=1M count=64
-	@echo "OSx2 Disk Image created (64MB raw). EFI area reserved at start."
+	@# Write GPT Signature at LBA 1 (Offset 512)
+	printf "EFI PART" | dd of=disk.img bs=1 seek=512 conv=notrunc
+	@echo "OSx2 GPT Disk Image created (64MB raw). GPT Header signature injected."
 
 # QEMU Run
 run: all

@@ -10,9 +10,9 @@ static void handle_command(char* cmd);
 int program_main() {
     clear();
     color(0x00FF88, 0x000000);
-    print("OSx2 (RTECH dos) - Kernel Expert Mode\n");
-    print("Permanent Storage: RNAFS (Proprietary)\n");
-    print("Note: Disk 0, Partition 0 is reserved for EFI.\n\n");
+    print("OSx2 (RTECH dos) - Kernel Expert Mode (64-bit)\n");
+    print("Partition Table: GPT (GUID Partition Table)\n");
+    print("Permanent Storage: RNAFS (Proprietary)\n\n");
 
     while (1) {
         char* input_str = readline("> ");
@@ -30,8 +30,8 @@ static void handle_command(char* cmd) {
         print("  lsfs          - List files on mounted RNAFS\n");
         print("  cat [file]    - Read file content\n");
         print("  write [f] [t] - Write text to file\n");
-        print("  addpart [s] [c]- Add partition (Start LBA, Count)\n");
-        print("  format [idx]  - Format partition with RNAFS\n");
+        print("  addpart [s] [c]- Add GPT partition (Start LBA, Count)\n");
+        print("  format [idx]  - Format GPT partition with RNAFS\n");
         print("  mount [idx]   - Mount RNAFS partition\n");
         print("  clear         - Clear screen\n");
         print("  exit          - Shutdown\n");
@@ -42,7 +42,7 @@ static void handle_command(char* cmd) {
     } else if (strncmp(cmd, "addpart ", 8) == 0) {
         char* start_str = cmd + 8;
         char* count_str = strchr(start_str, ' ');
-        if (count_str) {
+        if (start_str && count_str) {
             *count_str = 0;
             count_str++;
             addpart(atoi(start_str), atoi(count_str));
@@ -51,6 +51,8 @@ static void handle_command(char* cmd) {
         format(atoi(cmd + 7));
     } else if (strncmp(cmd, "mount ", 6) == 0) {
         mount(atoi(cmd + 6));
+    } else if (strcmp(cmd, "lsfs") == 0) {
+        lsfs();
     } else if (strncmp(cmd, "cat ", 4) == 0) {
         char* buf = (char*)auto_ram(4096);
         if (buf) {
