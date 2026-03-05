@@ -2,7 +2,10 @@
 #include "../libs/console.h"
 #include "../libs/memory.h"
 #include "../libs/input.h"
+#include "../libs/disk.h"
+#include "../libs/diskman.h"
 #include "../libs/fs.h"
+#include "../libs/rnafs.h"
 #include "../libs/loader.h"
 #include "../libs/core/event.h"
 #include "../../include/rsl.h"
@@ -31,6 +34,8 @@ void kernel_main(boot_params_t* params) {
     register_service(console_init);
     register_service(memory_init);
     register_service(input_init);
+    register_service(disk_init);
+    register_service(diskman_init);
     register_service(fs_init);
     register_service(loader_init);
 
@@ -54,7 +59,11 @@ void kernel_main(boot_params_t* params) {
         .release = release,
         .exit = exit_kernel,
         .clear = console_clear,
-        .set_color = console_set_color
+        .set_color = console_set_color,
+        .format = diskman_format_rnafs,
+        .mount = diskman_mount_rnafs,
+        .addpart = diskman_add_partition,
+        .lsfs = rnafs_ls
     };
 
     /* Hand off to loader */

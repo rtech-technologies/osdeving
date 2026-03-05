@@ -32,6 +32,11 @@ typedef struct {
     void (*exit)();
     void (*clear)();
     void (*set_color)(uint32 fg, uint32 bg);
+
+    void (*format)(int);
+    void (*mount)(int);
+    void (*addpart)(uint64, uint32);
+    void (*lsfs)();
 } rsl_syscall_table_t;
 
 /* --- High-Level "Noob-Friendly" API --- */
@@ -40,6 +45,12 @@ char* readline(const char* prompt);
 void  clear();
 void  quit();
 void  color(uint32 fg, uint32 bg);
+
+/* Disk & Partition Management */
+void  format(int idx);
+void  mount(int idx);
+void  addpart(uint64 start, uint32 count);
+void  lsfs();
 
 /* --- Auto-RAM: Managed Memory API --- */
 void* auto_ram(uint64 size);
@@ -61,5 +72,9 @@ void  memcpy(void* dst, const void* src, uint64 n);
 void  memset(void* s, int c, uint64 n);
 INTN  read_file(const char* path, void* buffer, uint64 max_size);
 INTN  write_file(const char* path, const void* buffer, uint64 size);
+
+/* --- Numeric Utilities --- */
+int    atoi(const char* s);
+void   itoa(int n, char* s, int base);
 
 #endif

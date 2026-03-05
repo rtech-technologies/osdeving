@@ -64,6 +64,30 @@ void color(uint32 fg, uint32 bg) {
     }
 }
 
+void lsfs() {
+    if (g_syscalls && g_syscalls->lsfs) {
+        g_syscalls->lsfs();
+    }
+}
+
+void format(int idx) {
+    if (g_syscalls && g_syscalls->format) {
+        g_syscalls->format(idx);
+    }
+}
+
+void mount(int idx) {
+    if (g_syscalls && g_syscalls->mount) {
+        g_syscalls->mount(idx);
+    }
+}
+
+void addpart(uint64 start, uint32 count) {
+    if (g_syscalls && g_syscalls->addpart) {
+        g_syscalls->addpart(start, count);
+    }
+}
+
 /* --- Auto-RAM: Simplified API --- */
 
 void* auto_ram(uint64 size) {
@@ -137,6 +161,38 @@ void memcpy(void* dst, const void* src, uint64 n) {
 void memset(void* s, int c, uint64 n) {
     uint8* p = (uint8*)s;
     while (n--) *p++ = (uint8)c;
+}
+
+int atoi(const char* s) {
+    int res = 0;
+    while (*s >= '0' && *s <= '9') {
+        res = res * 10 + (*s - '0');
+        s++;
+    }
+    return res;
+}
+
+void itoa(int n, char* s, int base) {
+    char* p = s;
+    char* p1, *p2;
+    unsigned int ud = n;
+    if (base == 10 && n < 0) {
+        *p++ = '-';
+        s++;
+        ud = -n;
+    }
+    do {
+        int remainder = ud % base;
+        *p++ = (remainder < 10) ? remainder + '0' : remainder + 'a' - 10;
+    } while (ud /= base);
+    *p = 0;
+    p1 = s;
+    p2 = p - 1;
+    while (p1 < p2) {
+        char tmp = *p1;
+        *p1++ = *p2;
+        *p2-- = tmp;
+    }
 }
 
 void _start(boot_params_t* params, rsl_syscall_table_t* syscalls) {

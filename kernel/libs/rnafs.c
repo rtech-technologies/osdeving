@@ -1,129 +1,108 @@
 #include "rnafs.h"
+#include "disk.h"
+#include "console.h"
 #include "../unice64/kernel.h"
 #include "../../include/rsl.h"
 
-static rnafs_superblock_t* sb = 0;
-static uint8* bitmap = 0;
+static uint32 mounted_lba = 0;
+static rnafs_superblock_t active_sb;
+static int is_mounted = 0;
 
 void rnafs_init() {
-    if (!kboot_params.ramdisk_base) return;
+    is_mounted = 0;
+}
 
-    sb = (rnafs_superblock_t*)kboot_params.ramdisk_base;
+void rnafs_format_partition(uint32 start_lba, uint32 size_sectors) {
+    rnafs_superblock_t sb;
+    sb.magic = RNAFS_MAGIC;
+    sb.total_blocks = size_sectors;
+    sb.bitmap_start = 1;
+    sb.bitmap_blocks = 1;
+    sb.dir_start = 2;
+    sb.dir_blocks = 4;
+    sb.data_start = 6;
 
-    if (sb->magic != RNAFS_MAGIC) {
-        /* If not formatted, we don't mount.
-           In a real system, we'd have a 'format' service. */
-        sb = 0;
-        return;
+    write_sectors(start_lba, 1, &sb);
+
+    uint8 zero[512];
+    memset(zero, 0, 512);
+    for (int i = 1; i < 6; i++) {
+        write_sectors(start_lba + i, 1, zero);
     }
-
-    bitmap = (uint8*)kboot_params.ramdisk_base + sb->bitmap_start * RNAFS_BLOCK_SIZE;
 }
 
-static int is_block_free(uint64 block) {
-    if (!bitmap) return 0;
-    return !(bitmap[block / 8] & (1 << (block % 8)));
-}
-
-static void set_block_used(uint64 block) {
-    if (!bitmap) return;
-    bitmap[block / 8] |= (1 << (block % 8));
-}
-
-static uint64 find_free_blocks(uint64 count) {
-    if (!sb) return 0;
-
-    uint64 consecutive = 0;
-    uint64 start = 0;
-
-    for (uint64 i = sb->data_start; i < sb->total_blocks; i++) {
-        if (consecutive == 0) start = i;
-
-        if (is_block_free(i)) {
-            consecutive++;
-            if (consecutive == count) return start;
-        } else {
-            consecutive = 0;
+void rnafs_mount_partition(uint32 start_lba) {
+    if (read_sectors(start_lba, 1, &active_sb)) {
+        if (active_sb.magic == RNAFS_MAGIC) {
+            mounted_lba = start_lba;
+            is_mounted = 1;
+            print("RNAFS: Mounted.\n");
         }
     }
-    return 0;
+}
+
+void rnafs_ls() {
+    if (!is_mounted) return;
+    rnafs_entry_t entries[RNAFS_MAX_FILES];
+    if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return;
+    print("Files:\n");
+    for (int i = 0; i < RNAFS_MAX_FILES; i++) {
+        if (entries[i].name[0] != 0) {
+            print("  ");
+            print(entries[i].name);
+            print("\n");
+        }
+    }
 }
 
 INTN rnafs_read(const char* path, void* buffer, uint64 max_size) {
-    if (!sb || !kboot_params.ramdisk_base) return -1;
-
-    rnafs_entry_t* dir = (rnafs_entry_t*)((uint8*)kboot_params.ramdisk_base + sb->dir_start * RNAFS_BLOCK_SIZE);
+    if (!is_mounted) return -1;
+    rnafs_entry_t entries[RNAFS_MAX_FILES];
+    if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
 
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
-        if (dir[i].name[0] == 0) continue;
-        if (strcmp(dir[i].name, path) == 0) {
-            uint64 size = dir[i].size;
+        if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
+            uint64 size = entries[i].size;
             if (size > max_size) size = max_size;
-            memcpy(buffer, (uint8*)kboot_params.ramdisk_base + dir[i].start_block * RNAFS_BLOCK_SIZE, size);
-            return (INTN)size;
+            uint32 blocks = (uint32)((size + 511) / 512);
+            if (read_sectors(mounted_lba + entries[i].start_block, blocks, buffer)) {
+                return (INTN)size;
+            }
         }
     }
-
-    /* Compat for v0 shell.bin */
-    if (strcmp(path, "shell.bin") == 0) {
-        uint64 size = kboot_params.ramdisk_size;
-        if (size > max_size) size = max_size;
-        memcpy(buffer, kboot_params.ramdisk_base, size);
-        return (INTN)size;
-    }
-
     return -1;
 }
 
 INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
-    if (!sb || !kboot_params.ramdisk_base) return -1;
+    if (!is_mounted) return -1;
+    rnafs_entry_t entries[RNAFS_MAX_FILES];
+    if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
 
-    rnafs_entry_t* dir = (rnafs_entry_t*)((uint8*)kboot_params.ramdisk_base + sb->dir_start * RNAFS_BLOCK_SIZE);
-
-    /* 1. Find existing file */
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
-        if (dir[i].name[0] != 0 && strcmp(dir[i].name, path) == 0) {
-            uint64 blocks_needed = (size + RNAFS_BLOCK_SIZE - 1) / RNAFS_BLOCK_SIZE;
-            uint64 current_blocks = (dir[i].size + RNAFS_BLOCK_SIZE - 1) / RNAFS_BLOCK_SIZE;
+        if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
+             uint32 blocks = (uint32)((size + 511) / 512);
+             if (write_sectors(mounted_lba + entries[i].start_block, blocks, buffer)) {
+                 entries[i].size = size;
+                 write_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
+                 return (INTN)size;
+             }
+             return -1;
+        }
+    }
 
-            if (blocks_needed <= current_blocks) {
-                memcpy((uint8*)kboot_params.ramdisk_base + dir[i].start_block * RNAFS_BLOCK_SIZE, buffer, size);
-                dir[i].size = size;
+    for (int i = 0; i < RNAFS_MAX_FILES; i++) {
+        if (entries[i].name[0] == 0) {
+            uint64 start = active_sb.data_start + (i * 128);
+            strcpy(entries[i].name, path);
+            entries[i].start_block = start;
+            entries[i].size = size;
+            uint32 blocks = (uint32)((size + 511) / 512);
+            if (write_sectors(mounted_lba + start, blocks, buffer)) {
+                write_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
                 return (INTN)size;
             }
-            return -1; /* For v1 we don't reallocate existing files yet */
+            return -1;
         }
     }
-
-    /* 2. Create new file if space exists */
-    int free_idx = -1;
-    for (int i = 0; i < RNAFS_MAX_FILES; i++) {
-        if (dir[i].name[0] == 0) {
-            free_idx = i;
-            break;
-        }
-    }
-
-    if (free_idx != -1) {
-        uint64 blocks_needed = (size + RNAFS_BLOCK_SIZE - 1) / RNAFS_BLOCK_SIZE;
-        uint64 start = find_free_blocks(blocks_needed);
-
-        if (start != 0) {
-            /* Mark bitmap */
-            for (uint64 b = 0; b < blocks_needed; b++) {
-                set_block_used(start + b);
-            }
-
-            /* Fill entry */
-            strcpy(dir[free_idx].name, path);
-            dir[free_idx].start_block = start;
-            dir[free_idx].size = size;
-
-            /* Write data */
-            memcpy((uint8*)kboot_params.ramdisk_base + start * RNAFS_BLOCK_SIZE, buffer, size);
-            return (INTN)size;
-        }
-    }
-
     return -1;
 }

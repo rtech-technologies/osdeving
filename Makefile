@@ -19,7 +19,7 @@ EFI_LDS = /usr/lib/elf_x86_64_efi.lds
 EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
 
 # Compilation Flags
-CFLAGS = -Iinclude -fno-stack-protector -fpic \
+CFLAGS = -Iinclude -Ikernel/libs -Ikernel/libs/core -fno-stack-protector -fpic \
          -fshort-wchar -mno-red-zone -Wall -fno-builtin -m64 \
          -DEFI_FUNCTION_WRAPPER
 
@@ -37,6 +37,8 @@ KERNEL_SRCS = $(KERNEL_DIR)/entry.c \
               $(LIBS_DIR)/console.c \
               $(LIBS_DIR)/font_data.c \
               $(LIBS_DIR)/input.c \
+              $(LIBS_DIR)/disk.c \
+              $(LIBS_DIR)/diskman.c \
               $(LIBS_DIR)/memory.c \
               $(LIBS_DIR)/fs.c \
               $(LIBS_DIR)/rnafs.c \
@@ -82,16 +84,25 @@ kernel.so: $(KERNEL_OBJS)
 $(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
 	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
 
-%.o: %.c $(HEADERS)
+# Force explicit rules to avoid builtin weirdness
+kernel/unice64/%.o: kernel/unice64/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# OS Disk Image Build (RNAFS format)
-disk: all
-	python3 scripts/rnafs_tool.py disk.img format
-	python3 scripts/rnafs_tool.py disk.img add $(BOOT_DIR)/shell.bin shell.bin
-	@echo "OSx2 Disk Image created: disk.img"
+kernel/libs/%.o: kernel/libs/%.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# QEMU Run (Boot from local EFI directory)
+kernel/libs/core/%.o: kernel/libs/core/%.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+programs/%.o: programs/%.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# OS Disk Image Build
+disk: all
+	dd if=/dev/zero of=disk.img bs=1M count=64
+	@echo "OSx2 Disk Image created (64MB raw). EFI area reserved at start."
+
+# QEMU Run
 run: all
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=fat:rw:boot -net none
 

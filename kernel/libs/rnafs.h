@@ -28,6 +28,9 @@ typedef struct {
 #define RNAFS_MAX_FILES 64
 
 void rnafs_init();
+void rnafs_format_partition(uint32 start_lba, uint32 size_sectors);
+void rnafs_mount_partition(uint32 start_lba);
+void rnafs_ls();
 INTN rnafs_read(const char* path, void* buffer, uint64 max_size);
 INTN rnafs_write(const char* path, const void* buffer, uint64 size);
 

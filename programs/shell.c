@@ -3,64 +3,78 @@
 /*
  * OSx2 Standard Shell
  * Powering RTECH dos via the RSL (RTECH Standard Library).
- *
- * This shell is designed to be easy for experts and noobs.
- * Add new commands in handle_command().
  */
 
 static void handle_command(char* cmd);
 
 int program_main() {
     clear();
-    color(0x00FF88, 0x000000); /* Pro Emerald Green */
+    color(0x00FF88, 0x000000);
     print("OSx2 (RTECH dos) - Kernel Expert Mode\n");
-    print("RSL Standard Library v1.0 - ARC Memory Enabled\n\n");
+    print("Permanent Storage: RNAFS (Proprietary)\n");
+    print("Note: Disk 0, Partition 0 is reserved for EFI.\n\n");
 
     while (1) {
-        /* Auto-RAM: readline handles allocation automatically */
         char* input_str = readline("> ");
-
         if (input_str) {
             handle_command(input_str);
-
-            /* Manual Release (ARC): optional for experts,
-               but good practice for large strings. */
             release(input_str);
         }
     }
-
     return 0;
 }
 
 static void handle_command(char* cmd) {
     if (strcmp(cmd, "help") == 0) {
-        print("Commands: help, echo [text], cat [file], write [file] [text], color [hex], clear, exit\n");
+        print("Commands:\n");
+        print("  lsfs          - List files on mounted RNAFS\n");
+        print("  cat [file]    - Read file content\n");
+        print("  write [f] [t] - Write text to file\n");
+        print("  addpart [s] [c]- Add partition (Start LBA, Count)\n");
+        print("  format [idx]  - Format partition with RNAFS\n");
+        print("  mount [idx]   - Mount RNAFS partition\n");
+        print("  clear         - Clear screen\n");
+        print("  exit          - Shutdown\n");
     } else if (strcmp(cmd, "exit") == 0) {
-        print("System shutdown requested.\n");
         quit();
     } else if (strcmp(cmd, "clear") == 0) {
         clear();
-    } else if (strncmp(cmd, "echo ", 5) == 0) {
-        print(cmd + 5);
-        print("\n");
+    } else if (strncmp(cmd, "addpart ", 8) == 0) {
+        char* start_str = cmd + 8;
+        char* count_str = strchr(start_str, ' ');
+        if (count_str) {
+            *count_str = 0;
+            count_str++;
+            addpart(atoi(start_str), atoi(count_str));
+        }
+    } else if (strncmp(cmd, "format ", 7) == 0) {
+        format(atoi(cmd + 7));
+    } else if (strncmp(cmd, "mount ", 6) == 0) {
+        mount(atoi(cmd + 6));
     } else if (strncmp(cmd, "cat ", 4) == 0) {
-        char* filename = cmd + 4;
-        /* Using auto_ram for a temporary buffer */
-        char* buf = (char*)auto_ram(1024);
+        char* buf = (char*)auto_ram(4096);
         if (buf) {
-            memset(buf, 0, 1024);
-            if (read_file(filename, buf, 1024) >= 0) {
+            memset(buf, 0, 4096);
+            if (read_file(cmd + 4, buf, 4096) >= 0) {
                 print(buf);
                 print("\n");
             } else {
-                print("Error: File not found.\n");
+                print("Error: File not found or RNAFS not mounted.\n");
             }
             release(buf);
         }
-    } else if (strncmp(cmd, "color ", 6) == 0) {
-        /* Reset to standard emerald green */
-        color(0x00FF88, 0x000000);
-        print("Colors reset to Emerald Green.\n");
+    } else if (strncmp(cmd, "write ", 6) == 0) {
+        char* arg = cmd + 6;
+        char* text = strchr(arg, ' ');
+        if (text) {
+            *text = 0;
+            text++;
+            if (write_file(arg, text, strlen(text)) >= 0) {
+                print("Write successful.\n");
+            } else {
+                print("Write failed.\n");
+            }
+        }
     } else if (cmd[0] != 0) {
         print("Unknown command: ");
         print(cmd);
