@@ -1,9 +1,10 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include "../../include/types.h"
-#include "../../include/rsl.h"
-#include "../../boot/efi_types.h"
+#include "../include/types.h"
+#include "../include/rsl.h"
+#include "../include/config.h"
+#include "../boot/efi_types.h"
 
 /* Events */
 typedef enum {

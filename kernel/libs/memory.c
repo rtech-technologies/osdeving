@@ -12,11 +12,13 @@ void* alloc(uint64 size) {
         return (void*)0;
     }
 
-    /* Total size = ARC header + payload + alignment */
+    /* Use configurable heap size limit from config.h */
+    uint64 max_heap = (uint64)CONFIG_HEAP_SIZE_MB * 1024 * 1024;
+
     uint64 total_size = sizeof(arc_header_t) + size;
     total_size = (total_size + 15) & ~15;
 
-    if (heap_ptr + total_size > kboot_params.heap_size) {
+    if (heap_ptr + total_size > max_heap || heap_ptr + total_size > kboot_params.heap_size) {
         return (void*)0;
     }
 
@@ -49,8 +51,6 @@ void release(void* ptr) {
         if (header->ref_count > 0) {
             header->ref_count--;
             if (header->ref_count == 0) {
-                /* In this simple version, we don't reclaim memory,
-                   but we invalidate the magic. */
                 header->magic = 0;
             }
         }

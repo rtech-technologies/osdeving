@@ -35,6 +35,9 @@
 ## 6. Build Rules
 - NO precompiled binaries or object files are allowed in the repository.
 - The system must be buildable from pure source using the provided `Makefile`.
+- Use `make menuconfig` to configure the kernel features and heap settings.
 
 ## 7. Development Tools
-- `tools/fontgen.html`: A pro-grade web studio to draw fonts and preview colors. It exports RSL-ready data and .FNT binaries.
+- `tools/fontgen.html`: A pro-grade web studio to draw fonts and preview colors.
+- `scripts/menuconfig.py`: Terminal-based configuration utility (LFS-style).
+- `scripts/rnafs_tool.py`: Host-side tool to manage RNAFS disk images and inject files.

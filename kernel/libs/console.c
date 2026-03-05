@@ -12,6 +12,10 @@ void console_init() {
     cursor_x = 0;
     cursor_y = 0;
 
+    #ifdef CONFIG_EMERALD_MODE
+    fg_color = 0x00FF88;
+    #endif
+
     /* Clear screen */
     if (kboot_params.framebuffer) {
         for (uint32 i = 0; i < kboot_params.height * kboot_params.pixels_per_scanline; i++) {
@@ -34,7 +38,9 @@ static void scroll() {
 
     uint32 row_size = kboot_params.pixels_per_scanline * 4;
     uint32 total_rows = kboot_params.height;
-    uint32 scroll_amount = 10;
+
+    /* Configurable scroll amount */
+    uint32 scroll_amount = CONFIG_SCROLL_SPEED;
 
     for (uint32 y = 0; y < total_rows - scroll_amount; y++) {
         memcpy((uint8*)kboot_params.framebuffer + y * row_size,
@@ -42,7 +48,6 @@ static void scroll() {
                row_size);
     }
 
-    /* Clear last row with BG color */
     for (uint32 y = total_rows - scroll_amount; y < total_rows; y++) {
         for (uint32 x = 0; x < kboot_params.pixels_per_scanline; x++) {
             kboot_params.framebuffer[y * kboot_params.pixels_per_scanline + x] = bg_color;

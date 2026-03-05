@@ -4,13 +4,16 @@ CC = gcc
 LD = ld
 OBJCOPY = objcopy
 
+# Load Configuration if exists
+-include .config
+
 # Paths
 BOOT_DIR = boot
 EFI_DIR = $(BOOT_DIR)/EFI/BOOT
 KERNEL_DIR = kernel/unice64
 LIBS_DIR = kernel/libs
 
-# Paths for EFI build (standard on Debian/Ubuntu)
+# Paths for EFI build
 EFI_LIB = /usr/lib
 EFI_LDS = /usr/lib/elf_x86_64_efi.lds
 EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
@@ -20,11 +23,9 @@ CFLAGS = -Iinclude -fno-stack-protector -fpic \
          -fshort-wchar -mno-red-zone -Wall -fno-builtin -m64 \
          -DEFI_FUNCTION_WRAPPER
 
-# Linker Flags for EFI Shared Object
+# Linker Flags
 LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
               -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
-
-# Linker Flags for raw binary (Shell)
 LDFLAGS_BIN = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
 
 LIBS = -lefi -lgnuefi
@@ -32,6 +33,7 @@ LIBS = -lefi -lgnuefi
 # Kernel Source Files
 KERNEL_SRCS = $(KERNEL_DIR)/entry.c \
               $(KERNEL_DIR)/main.c \
+              $(KERNEL_DIR)/gdt.c \
               $(LIBS_DIR)/console.c \
               $(LIBS_DIR)/font_data.c \
               $(LIBS_DIR)/input.c \
@@ -47,11 +49,24 @@ KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 SHELL_SRCS = programs/libsystem.c programs/shell.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 
-# Header files for dependency tracking
 HEADERS = $(shell find include kernel -name "*.h")
 
 # Default Target
-all: $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
+all: prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
+
+prepare:
+	@if [ ! -f .config ]; then \
+		echo "No .config found, using defaults..."; \
+		echo "CONFIG_DEBUG_LOGS=y" > .config; \
+		echo "CONFIG_HEAP_SIZE_MB=4" >> .config; \
+		echo "CONFIG_SCROLL_SPEED=10" >> .config; \
+		echo "CONFIG_EMERALD_MODE=y" >> .config; \
+		echo "CONFIG_LOAD_SHELL=y" >> .config; \
+		python3 scripts/menuconfig.py --save; \
+	fi
+
+menuconfig:
+	python3 scripts/menuconfig.py
 
 # Kernel Build
 $(EFI_DIR)/BOOTX64.EFI: kernel.so
@@ -67,39 +82,24 @@ kernel.so: $(KERNEL_OBJS)
 $(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
 	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
 
-# Generic Rule for Object Files
 %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# ISO Image Build
-iso: all
-	@mkdir -p iso_root/EFI/BOOT
-	@cp $(EFI_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
-	@cp $(BOOT_DIR)/shell.bin iso_root/
-	xorriso -as mkisofs -R -f -e EFI/BOOT/BOOTX64.EFI -no-emul-boot \
-	        -o osx2.iso iso_root
-	@rm -rf iso_root
-	@echo "OSx2 ISO created: osx2.iso"
-
-# Disk Image Build
+# OS Disk Image Build (RNAFS format)
 disk: all
-	dd if=/dev/zero of=disk.img bs=1M count=64
-	mformat -i disk.img -F ::
-	mmd -i disk.img ::/EFI
-	mmd -i disk.img ::/EFI/BOOT
-	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/
-	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/
+	python3 scripts/rnafs_tool.py disk.img format
+	python3 scripts/rnafs_tool.py disk.img add $(BOOT_DIR)/shell.bin shell.bin
 	@echo "OSx2 Disk Image created: disk.img"
 
-# QEMU Run
+# QEMU Run (Boot from local EFI directory)
 run: all
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=fat:rw:boot -net none
 
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso disk.img
+	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso disk.img .config include/config.h
 	@rm -rf $(BOOT_DIR)/EFI
 	@echo "Cleaned up build artifacts."
 
-.PHONY: all clean run iso disk
+.PHONY: all clean run menuconfig prepare disk
