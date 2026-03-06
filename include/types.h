@@ -23,6 +23,7 @@ typedef uint8             CHAR8;
 
 typedef void*             EFI_HANDLE;
 typedef UINTN             EFI_STATUS;
+typedef uint64            EFI_PHYSICAL_ADDRESS;
 
 #define NULL ((void*)0)
 

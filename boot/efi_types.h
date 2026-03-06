@@ -111,8 +111,8 @@ struct _EFI_BOOT_SERVICES {
     uint8  Hdr[24];
     void*  RaiseTPL;
     void*  RestoreTPL;
-    void*  AllocatePages;
-    void*  FreePages;
+    EFI_STATUS (EFIAPI *AllocatePages)(uint32 Type, uint32 MemoryType, UINTN Pages, EFI_PHYSICAL_ADDRESS *Memory);
+    EFI_STATUS (EFIAPI *FreePages)(EFI_PHYSICAL_ADDRESS Memory, UINTN Pages);
     EFI_STATUS (EFIAPI *GetMemoryMap)(UINTN *MemoryMapSize, void *MemoryMap, UINTN *MapKey, UINTN *DescriptorSize, uint32 *DescriptorVersion);
     EFI_STATUS (EFIAPI *AllocatePool)(uint32 PoolType, UINTN Size, void **Buffer);
     EFI_STATUS (EFIAPI *FreePool)(void *Buffer);

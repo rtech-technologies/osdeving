@@ -18,7 +18,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
     }
 
-    /* 2. Load shell.bin into Memory */
+    /* 2. Load shell.bin into Specific Address 0x200000 */
     EFI_LOADED_IMAGE_PROTOCOL *li;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
     EFI_FILE_PROTOCOL *root, *file;
@@ -35,13 +35,19 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
                         file_size = ((EFI_FILE_INFO*)info_buffer)->FileSize;
                     }
 
-                    UINTN size = (UINTN)file_size;
-                    void* buffer;
-                    if (SystemTable->BootServices->AllocatePool(1, size, &buffer) == EFI_SUCCESS) {
-                        if (file->Read(file, &size, buffer) == EFI_SUCCESS) {
-                            params.ramdisk_base = buffer;
-                            params.ramdisk_size = (uint64)size;
+                    /* Force Load at 0x200000 */
+                    EFI_PHYSICAL_ADDRESS kernel_addr = 0x200000;
+                    UINTN pages = (file_size + 4095) / 4096;
+
+                    /* AllocateAddress (type 2) forces UEFI to use the specified addr */
+                    if (SystemTable->BootServices->AllocatePages(2, 1, pages, &kernel_addr) == EFI_SUCCESS) {
+                        UINTN read_size = (UINTN)file_size;
+                        if (file->Read(file, &read_size, (void*)kernel_addr) == EFI_SUCCESS) {
+                            params.ramdisk_base = (void*)kernel_addr;
+                            params.ramdisk_size = (uint64)read_size;
                         }
+                    } else {
+                        /* Fallback or Error */
                     }
                     file->Close(file);
                 }
@@ -50,15 +56,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
-    /* 3. Pre-allocate Heap */
+    /* 3. Pre-allocate Heap (Safe spot above kernel) */
     UINTN heap_size = 4 * 1024 * 1024;
-    void* heap_base;
-    if (SystemTable->BootServices->AllocatePool(2, heap_size, &heap_base) == EFI_SUCCESS) {
-        params.heap_base = heap_base;
+    EFI_PHYSICAL_ADDRESS heap_addr = 0x1000000; /* 16MB mark */
+    UINTN heap_pages = (heap_size + 4095) / 4096;
+
+    if (SystemTable->BootServices->AllocatePages(2, 2, heap_pages, &heap_addr) == EFI_SUCCESS) {
+        params.heap_base = (void*)heap_addr;
         params.heap_size = heap_size;
     }
 
-    /* 4. Exit Boot Services */
+    /* 4. Exit Boot Services Ritual */
     UINTN map_size = 0;
     UINTN map_key = 0;
     UINTN descriptor_size = 0;
@@ -71,7 +79,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     if (SystemTable->BootServices->AllocatePool(2, map_size, &map_buffer) == EFI_SUCCESS) {
         if (SystemTable->BootServices->GetMemoryMap(&map_size, map_buffer, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
             if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
-                /* Freestanding jump */
+                /* Freestanding handoff */
                 kernel_main(&params);
             }
         }
