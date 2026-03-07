@@ -1,4 +1,5 @@
 #include "disk.h"
+#include "kutils.h"
 #include "../unice64/kernel.h"
 #include "../../include/rsl.h"
 

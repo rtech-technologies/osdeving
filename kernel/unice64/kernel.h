@@ -1,10 +1,9 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include "../include/types.h"
-#include "../include/rsl.h"
-#include "../include/config.h"
-#include "../boot/efi_types.h"
+#include "../../include/types.h"
+#include "../../include/rsl.h"
+#include "../../include/config.h"
 
 /* Events */
 typedef enum {
@@ -27,6 +26,7 @@ void register_event_handler(event_handler_t handler);
 extern int running;
 extern boot_params_t kboot_params;
 
-void kernel_main(boot_params_t* params);
+/* Entry point defined in main.c */
+void kernel_start(boot_params_t* params);
 
 #endif

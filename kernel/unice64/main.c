@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "../libs/console.h"
+#include "../libs/kutils.h"
 #include "../libs/memory.h"
 #include "../libs/input.h"
 #include "../libs/disk.h"
@@ -27,10 +28,13 @@ void exit_kernel() {
     running = 0;
 }
 
-void kernel_main(boot_params_t* params) {
+/*
+ * The God-Machine Entry Point (Stage 2)
+ * Must be at the very top to ensure it's at the start of kernel.bin
+ */
+void kernel_start(boot_params_t* params) {
     kboot_params = *params;
 
-    /* Ritual: Register Services */
     register_service(console_init);
     register_service(memory_init);
     register_service(input_init);
@@ -39,16 +43,13 @@ void kernel_main(boot_params_t* params) {
     register_service(fs_init);
     register_service(loader_init);
 
-    /* Initialize Services */
     for (uint32 i = 0; i < service_count; i++) {
         registered_services[i]();
     }
 
-    print("Kernel started (Expert Python-like ARC mode)\n");
-
+    print("OSx2 God-Mode: Kernel Handover Successful.\n");
     trigger(EVENT_INIT);
 
-    /* Populate Syscall Table */
     rsl_syscall_table_t syscalls = {
         .print = print,
         .input = input,
@@ -66,10 +67,8 @@ void kernel_main(boot_params_t* params) {
         .lsfs = rnafs_ls
     };
 
-    /* Hand off to loader */
     loader_run_shell(&syscalls);
 
-    /* Event Loop */
     while (running) {
         trigger(EVENT_MAIN);
     }

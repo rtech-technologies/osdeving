@@ -39,20 +39,20 @@ static void handle_command(char* cmd) {
         quit();
     } else if (strcmp(cmd, "clear") == 0) {
         clear();
+    } else if (strncmp(cmd, "lsfs", 4) == 0) {
+        lsfs();
     } else if (strncmp(cmd, "addpart ", 8) == 0) {
         char* start_str = cmd + 8;
         char* count_str = strchr(start_str, ' ');
         if (start_str && count_str) {
             *count_str = 0;
             count_str++;
-            addpart(atoi(start_str), atoi(count_str));
+            addpart((uint64)atoi(start_str), (uint32)atoi(count_str));
         }
     } else if (strncmp(cmd, "format ", 7) == 0) {
         format(atoi(cmd + 7));
     } else if (strncmp(cmd, "mount ", 6) == 0) {
         mount(atoi(cmd + 6));
-    } else if (strcmp(cmd, "lsfs") == 0) {
-        lsfs();
     } else if (strncmp(cmd, "cat ", 4) == 0) {
         char* buf = (char*)auto_ram(4096);
         if (buf) {

@@ -1,6 +1,7 @@
 #include "rnafs.h"
 #include "disk.h"
 #include "console.h"
+#include "kutils.h"
 #include "../unice64/kernel.h"
 #include "../../include/rsl.h"
 
@@ -21,9 +22,7 @@ void rnafs_format_partition(uint32 start_lba, uint32 size_sectors) {
     sb.dir_start = 2;
     sb.dir_blocks = 4;
     sb.data_start = 6;
-
     write_sectors(start_lba, 1, &sb);
-
     uint8 zero[512];
     memset(zero, 0, 512);
     for (int i = 1; i < 6; i++) {
@@ -59,7 +58,6 @@ INTN rnafs_read(const char* path, void* buffer, uint64 max_size) {
     if (!is_mounted) return -1;
     rnafs_entry_t entries[RNAFS_MAX_FILES];
     if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
-
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
             uint64 size = entries[i].size;
@@ -77,7 +75,6 @@ INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
     if (!is_mounted) return -1;
     rnafs_entry_t entries[RNAFS_MAX_FILES];
     if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
-
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
              uint32 blocks = (uint32)((size + 511) / 512);
@@ -89,7 +86,6 @@ INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
              return -1;
         }
     }
-
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] == 0) {
             uint64 start = active_sb.data_start + (i * 128);

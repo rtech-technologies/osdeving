@@ -4,36 +4,39 @@ CC = gcc
 LD = ld
 OBJCOPY = objcopy
 
-# Load Configuration if exists
+# Load Configuration
 -include .config
 
 # Paths
 BOOT_DIR = boot
 EFI_DIR = $(BOOT_DIR)/EFI/BOOT
+LOADER_DIR = loader
 KERNEL_DIR = kernel/unice64
 LIBS_DIR = kernel/libs
 
-# Paths for EFI build
+# GNU-EFI Paths (Adjust if needed)
 EFI_LIB = /usr/lib
 EFI_LDS = /usr/lib/elf_x86_64_efi.lds
 EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
 
-# Compilation Flags
-CFLAGS = -Iinclude -Ikernel/libs -Ikernel/libs/core -fno-stack-protector -fpic \
-         -fshort-wchar -mno-red-zone -Wall -fno-builtin -m64 \
-         -DEFI_FUNCTION_WRAPPER
+# Flags
+CFLAGS_COMMON = -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -O0
+CFLAGS_EFI = $(CFLAGS_COMMON) -fpic -fshort-wchar -DEFI_FUNCTION_WRAPPER
+CFLAGS_KERNEL = $(CFLAGS_COMMON) -I$(LIBS_DIR) -I$(LIBS_DIR)/core -I$(KERNEL_DIR) -ffreestanding
 
-# Linker Flags
-LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared \
-              -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
-LDFLAGS_BIN = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
+LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
+LDFLAGS_KERNEL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
+LDFLAGS_SHELL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
 
-LIBS = -lefi -lgnuefi
+LIBS_EFI = -lefi -lgnuefi
 
-# Kernel Source Files
-KERNEL_SRCS = $(KERNEL_DIR)/entry.c \
-              $(KERNEL_DIR)/main.c \
+# Source Files
+LOADER_SRCS = $(LOADER_DIR)/entry.c
+LOADER_OBJS = $(LOADER_SRCS:.c=.o)
+
+KERNEL_SRCS = $(KERNEL_DIR)/main.c \
               $(KERNEL_DIR)/gdt.c \
+              $(LIBS_DIR)/kutils.c \
               $(LIBS_DIR)/console.c \
               $(LIBS_DIR)/font_data.c \
               $(LIBS_DIR)/input.c \
@@ -47,72 +50,67 @@ KERNEL_SRCS = $(KERNEL_DIR)/entry.c \
 
 KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
 
-# Shell Source Files
 SHELL_SRCS = programs/libsystem.c programs/shell.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 
-HEADERS = $(shell find include kernel -name "*.h")
+HEADERS = $(shell find include kernel loader -name "*.h")
 
 # Default Target
-all: prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
+all: prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/kernel.bin $(BOOT_DIR)/shell.bin
 
 prepare:
 	@if [ ! -f .config ]; then \
 		echo "No .config found, using defaults..."; \
-		echo "CONFIG_DEBUG_LOGS=y" > .config; \
-		echo "CONFIG_HEAP_SIZE_MB=4" >> .config; \
-		echo "CONFIG_SCROLL_SPEED=10" >> .config; \
-		echo "CONFIG_EMERALD_MODE=y" >> .config; \
-		echo "CONFIG_LOAD_SHELL=y" >> .config; \
 		python3 scripts/menuconfig.py --save; \
 	fi
 
-menuconfig:
-	python3 scripts/menuconfig.py
-
-# Kernel Build
-$(EFI_DIR)/BOOTX64.EFI: kernel.so
+# Stage 1: Loader (EFI)
+$(EFI_DIR)/BOOTX64.EFI: loader.so
 	@mkdir -p $(EFI_DIR)
 	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic \
 	           -j .dynsym  -j .rel -j .rela -j .reloc \
-	           -j .rodata* --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
+	           -j .rodata* --target=efi-app-x86_64 loader.so $(EFI_DIR)/BOOTX64.EFI
 
-kernel.so: $(KERNEL_OBJS)
-	$(LD) $(LDFLAGS_EFI) $(KERNEL_OBJS) -o kernel.so $(LIBS)
+loader.so: $(LOADER_OBJS)
+	$(LD) $(LDFLAGS_EFI) $(LOADER_OBJS) -o loader.so $(LIBS_EFI)
 
-# Shell Build
+$(LOADER_DIR)/%.o: $(LOADER_DIR)/%.c $(HEADERS)
+	$(CC) $(CFLAGS_EFI) -c $< -o $@
+
+# Stage 2: Kernel (Raw Binary)
+$(BOOT_DIR)/kernel.bin: $(KERNEL_OBJS)
+	$(LD) $(LDFLAGS_KERNEL) $(KERNEL_OBJS) -o $(BOOT_DIR)/kernel.bin
+
+$(KERNEL_DIR)/%.o: $(KERNEL_DIR)/%.c $(HEADERS)
+	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
+
+$(LIBS_DIR)/%.o: $(LIBS_DIR)/%.c $(HEADERS)
+	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
+
+$(LIBS_DIR)/core/%.o: $(LIBS_DIR)/core/%.c $(HEADERS)
+	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
+
+# Programs (Raw Binary)
 $(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
-	$(LD) $(LDFLAGS_BIN) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
-
-# Force explicit rules to avoid builtin weirdness
-kernel/unice64/%.o: kernel/unice64/%.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-kernel/libs/%.o: kernel/libs/%.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-kernel/libs/core/%.o: kernel/libs/core/%.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(LD) $(LDFLAGS_SHELL) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
 
 programs/%.o: programs/%.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
 
-# OS Disk Image Build (GPT Simulation)
+# Disk Image
 disk: all
 	dd if=/dev/zero of=disk.img bs=1M count=64
-	@# Write GPT Signature at LBA 1 (Offset 512)
-	printf "EFI PART" | dd of=disk.img bs=1 seek=512 conv=notrunc
-	@echo "OSx2 GPT Disk Image created (64MB raw). GPT Header signature injected."
-
-# QEMU Run
-run: all
-	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=fat:rw:boot -net none
+	python3 scripts/rnafs_tool.py disk.img format
+	python3 scripts/rnafs_tool.py disk.img add $(BOOT_DIR)/shell.bin shell.bin
+	@echo "OSx2 Disk Image created. kernel.bin must be manually placed in EFI path for loader to find it."
+	@# For simplicity in v1.2, the loader expects kernel.bin in the root of EFI partition
+	mcopy -i disk.img $(BOOT_DIR)/kernel.bin ::/kernel.bin
 
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so $(BOOT_DIR)/shell.bin osx2.iso disk.img .config include/config.h
+	@rm -f loader.so $(BOOT_DIR)/kernel.bin $(BOOT_DIR)/shell.bin disk.img .config include/config.h
 	@rm -rf $(BOOT_DIR)/EFI
-	@echo "Cleaned up build artifacts."
+	@echo "Cleaned up."
 
-.PHONY: all clean run menuconfig prepare disk
+.PHONY: all clean disk prepare

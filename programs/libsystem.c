@@ -146,7 +146,7 @@ uint64 strlen(const char* s) {
 }
 
 char* strchr(const char* s, int c) {
-    while (*s != (char)c) {
+    while (s && *s != (char)c) {
         if (!*s++) return (void*)0;
     }
     return (char*)s;
@@ -165,7 +165,7 @@ void memset(void* s, int c, uint64 n) {
 
 int atoi(const char* s) {
     int res = 0;
-    while (*s >= '0' && *s <= '9') {
+    while (s && *s >= '0' && *s <= '9') {
         res = res * 10 + (*s - '0');
         s++;
     }
