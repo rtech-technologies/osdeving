@@ -14,7 +14,10 @@ void console_init() {
     cursor_y = 0;
     #ifdef CONFIG_EMERALD_MODE
     fg_color = 0x00FF88;
+    #else
+    fg_color = CONFIG_FG_COLOR;
     #endif
+    bg_color = CONFIG_BG_COLOR;
     if (kboot_params.framebuffer) {
         for (uint32 i = 0; i < kboot_params.height * kboot_params.pixels_per_scanline; i++) {
             kboot_params.framebuffer[i] = bg_color;

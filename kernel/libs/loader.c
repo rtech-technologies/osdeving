@@ -8,6 +8,7 @@ void loader_init() {
 }
 
 void loader_run_shell(rsl_syscall_table_t* syscalls) {
+    #ifdef CONFIG_LOAD_SHELL
     /* Stage 2 Loader: Load shell.bin from disk using kernel drivers */
     char* shell_buf = (char*)alloc(65536);
     if (shell_buf) {
@@ -20,4 +21,7 @@ void loader_run_shell(rsl_syscall_table_t* syscalls) {
              print("Loader: shell.bin not found on disk. (Is RNAFS mounted?)\n");
         }
     }
+    #else
+    print("Loader: Auto-load shell disabled by config.\n");
+    #endif
 }
