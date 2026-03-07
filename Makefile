@@ -31,7 +31,7 @@ CFLAGS_KERNEL = $(CFLAGS_COMMON) -I$(LIBS_DIR) -I$(LIBS_DIR)/core -I$(KERNEL_DIR
 
 LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
 LDFLAGS_KERNEL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
-LDFLAGS_SHELL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
+LDFLAGS_SHELL = -nostdlib -T programs/linker.ld --oformat binary
 
 LIBS_EFI = -lefi -lgnuefi
 
@@ -39,21 +39,20 @@ LIBS_EFI = -lefi -lgnuefi
 LOADER_SRCS = $(LOADER_DIR)/entry.c
 LOADER_OBJS = $(LOADER_SRCS:.c=.o)
 
-KERNEL_SRCS = $(KERNEL_DIR)/main.c \
-              $(KERNEL_DIR)/gdt.c \
-              $(LIBS_DIR)/kutils.c \
-              $(LIBS_DIR)/console.c \
-              $(LIBS_DIR)/font_data.c \
-              $(LIBS_DIR)/input.c \
-              $(LIBS_DIR)/disk.c \
-              $(LIBS_DIR)/diskman.c \
-              $(LIBS_DIR)/memory.c \
-              $(LIBS_DIR)/fs.c \
-              $(LIBS_DIR)/rnafs.c \
-              $(LIBS_DIR)/loader.c \
-              $(LIBS_DIR)/core/event.c
-
-KERNEL_OBJS = $(KERNEL_SRCS:.c=.o)
+# ORDER MATTERS: main.o must be first for raw binary entry
+KERNEL_OBJS = $(KERNEL_DIR)/main.o \
+              $(KERNEL_DIR)/gdt.o \
+              $(LIBS_DIR)/kutils.o \
+              $(LIBS_DIR)/console.o \
+              $(LIBS_DIR)/font_data.o \
+              $(LIBS_DIR)/input.o \
+              $(LIBS_DIR)/disk.o \
+              $(LIBS_DIR)/diskman.o \
+              $(LIBS_DIR)/memory.o \
+              $(LIBS_DIR)/fs.o \
+              $(LIBS_DIR)/rnafs.o \
+              $(LIBS_DIR)/loader.o \
+              $(LIBS_DIR)/core/event.o
 
 SHELL_SRCS = programs/libsystem.c programs/shell.c
 SHELL_OBJS = $(SHELL_SRCS:.c=.o)

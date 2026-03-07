@@ -1,9 +1,9 @@
-ENTRY(kernel_start)
+ENTRY(_start)
 SECTIONS
 {
-    . = 0x1000000;
+    . = 0x0; /* Raw binary, will be loaded into an allocated buffer */
     .text : {
-        KEEP(*(.text.kernel_start))
+        KEEP(*(.text._start))
         *(.text*)
     }
     .rodata : { *(.rodata*) }

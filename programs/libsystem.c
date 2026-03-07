@@ -195,6 +195,7 @@ void itoa(int n, char* s, int base) {
     }
 }
 
+__attribute__((section(".text._start")))
 void _start(boot_params_t* params, rsl_syscall_table_t* syscalls) {
     if (params) kboot_params = *params;
     if (syscalls) g_syscalls = syscalls;

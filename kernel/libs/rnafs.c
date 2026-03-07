@@ -23,10 +23,18 @@ void rnafs_format_partition(uint32 start_lba, uint32 size_sectors) {
     sb.dir_blocks = 4;
     sb.data_start = 6;
     write_sectors(start_lba, 1, &sb);
-    uint8 zero[512];
-    memset(zero, 0, 512);
-    for (int i = 1; i < 6; i++) {
-        write_sectors(start_lba + i, 1, zero);
+
+    uint8 block[512];
+    memset(block, 0, 512);
+
+    /* Bitmap: mark metadata blocks (0-5) as used */
+    block[0] = 0x3F; /* 00111111 */
+    write_sectors(start_lba + (uint32)sb.bitmap_start, 1, block);
+
+    /* Directory & Data Initialization */
+    memset(block, 0, 512);
+    for (int i = (int)sb.dir_start; i < (int)sb.data_start; i++) {
+        write_sectors(start_lba + (uint32)i, 1, block);
     }
 }
 
@@ -73,32 +81,68 @@ INTN rnafs_read(const char* path, void* buffer, uint64 max_size) {
 
 INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
     if (!is_mounted) return -1;
+
     rnafs_entry_t entries[RNAFS_MAX_FILES];
-    if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
+    if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
+
+    uint8 bitmap[512];
+    if (!read_sectors(mounted_lba + (uint32)active_sb.bitmap_start, 1, bitmap)) return -1;
+
+    uint32 blocks_needed = (uint32)((size + 511) / 512);
+    int entry_idx = -1;
+    uint64 start_block = 0;
+
+    /* Check if file exists */
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
-             uint32 blocks = (uint32)((size + 511) / 512);
-             if (write_sectors(mounted_lba + entries[i].start_block, blocks, buffer)) {
-                 entries[i].size = size;
-                 write_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
-                 return (INTN)size;
-             }
-             return -1;
+            /* For v0 simplicity, we re-allocate even for existing files to avoid complexity */
+            /* In a real FS we'd check if old space fits. Here we just clear old bits if we were fancy. */
+            entry_idx = i;
+            break;
         }
     }
-    for (int i = 0; i < RNAFS_MAX_FILES; i++) {
-        if (entries[i].name[0] == 0) {
-            uint64 start = active_sb.data_start + (i * 128);
-            strcpy(entries[i].name, path);
-            entries[i].start_block = start;
-            entries[i].size = size;
-            uint32 blocks = (uint32)((size + 511) / 512);
-            if (write_sectors(mounted_lba + start, blocks, buffer)) {
-                write_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
-                return (INTN)size;
+
+    if (entry_idx == -1) {
+        /* Find new entry */
+        for (int i = 0; i < RNAFS_MAX_FILES; i++) {
+            if (entries[i].name[0] == 0) {
+                entry_idx = i;
+                break;
             }
-            return -1;
         }
     }
-    return -1;
+
+    if (entry_idx == -1) return -1;
+
+    /* Simple Contiguous Allocation */
+    uint32 count = 0;
+    for (uint32 i = (uint32)active_sb.data_start; i < (uint32)active_sb.total_blocks; i++) {
+        if (!(bitmap[i / 8] & (1 << (i % 8)))) {
+            if (count == 0) start_block = i;
+            count++;
+            if (count == blocks_needed) break;
+        } else {
+            count = 0;
+        }
+    }
+
+    if (count < blocks_needed) return -1;
+
+    /* Mark Bitmap */
+    for (uint32 i = (uint32)start_block; i < (uint32)start_block + blocks_needed; i++) {
+        bitmap[i / 8] |= (1 << (i % 8));
+    }
+
+    /* Write Data */
+    if (!write_sectors(mounted_lba + (uint32)start_block, blocks_needed, buffer)) return -1;
+
+    /* Update Directory & Bitmap */
+    strcpy(entries[entry_idx].name, path);
+    entries[entry_idx].start_block = start_block;
+    entries[entry_idx].size = size;
+
+    write_sectors(mounted_lba + (uint32)active_sb.bitmap_start, 1, bitmap);
+    write_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
+
+    return (INTN)size;
 }

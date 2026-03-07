@@ -30,8 +30,8 @@ void exit_kernel() {
 
 /*
  * The God-Machine Entry Point (Stage 2)
- * Must be at the very top to ensure it's at the start of kernel.bin
  */
+__attribute__((section(".text.kernel_start")))
 void kernel_start(boot_params_t* params) {
     kboot_params = *params;
 

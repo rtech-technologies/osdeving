@@ -21,11 +21,11 @@
 - Programs must include ONLY `<rsl.h>` and never internal kernel headers.
 - High-level APIs like `readline()` and `color()` are provided for ease of use.
 
-## 4. Memory Model (ARC & Auto-RAM)
-- OSx2 uses a Python-like transparent Automatic Reference Counting (ARC) system.
-- Memory is managed via `auto_ram()`, `retain()`, and `release()`.
-- RSL functions like `readline()` and `str_create()` automatically allocate RAM using this system.
-- The kernel ensures RAM is handled safely without manual borrowing rules.
+## 4. Memory Model (ARC & Managed RAM)
+- OSx2 implements an Automatic Reference Counting (ARC) system for managed heap objects.
+- High-level RSL functions (e.g., `readline`, `str_create`) return managed pointers with an initial ref-count of 1.
+- Developers use `retain()` to increment and `release()` to decrement reference counts.
+- **Note:** In the current v0.x implementation, the backing store is a high-speed bump allocator. While ref-counts are tracked, memory is not yet recycled for reuse. Manual `release()` calls are currently required for future-proofing and consistency with the RSL standard.
 
 ## 5. Console & Input
 - Console supports full vertical scrolling and manual 8x8 font rendering to the GOP framebuffer.
