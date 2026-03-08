@@ -1,112 +1,97 @@
-# OSx2 (RTECH dos) Technical Specification (CODEBASE.md)
+# OSx2 (RTECH dos) Implementation Details (CODEBASE.md)
 
-This document serves as the definitive technical reference for the OSx2 operating system architecture. It is designed to be used as a blueprint for a complete rewrite of the system.
-
-## 1. Physical Memory Map
-
-The system uses fixed physical memory offsets to ensure deterministic behavior between the UEFI Loader and the Freestanding Kernel.
-
-| Base Address | Size | Description |
-| :--- | :--- | :--- |
-| `0x1000000` | 16 MB | **Stage 2 Kernel Binary.** First 4 bytes must be `0xDEADBEEF`. Entry point at `0x1000004`. |
-| `0x2000000` | 8 MB | **Managed ARC Heap.** Allocated by Stage 1, used by Stage 2 for all `alloc()` calls. |
-| `0x3000000` | 16 MB | **Program Memory.** Where `shell.bin` is loaded by Stage 1. |
-| `0x4000000` | 16 MB | **System Ramdisk.** A dedicated, zeroed buffer used as the physical block device. |
+This document provides the exact technical implementation details of how the OSx2 system fulfills the requirements of `ARCHITECTURE.md`. It is intended for OS developers who need to understand or rewrite the system from scratch.
 
 ---
 
-## 2. Stage 1: The Handover Protocol (`loader/entry.c`)
+## 1. The Kernel Ritual & Service Registry (`main.c`)
+To keep the kernel core (`main.c`) clean of hardware and filesystem logic, I implemented a **Service Registry** using function pointers.
 
-The Stage 1 loader is a PE32+ UEFI application (`BOOTX64.EFI`) that performs the following sequence:
-
-1.  **Hardware Discovery**: Locate `EFI_GRAPHICS_OUTPUT_PROTOCOL` (GOP) to retrieve the framebuffer base, resolution, and pixels-per-scanline.
-2.  **Binary Loading**:
-    - Load `kernel.bin` to `0x1000000` using `AllocatePages` with `Type 2` (EfiLoaderCode).
-    - Load `shell.bin` to `0x3000000` (EfiLoaderCode).
-3.  **Memory Setup**:
-    - Allocate 8MB at `0x2000000` for the kernel heap.
-    - Allocate 16MB at `0x4000000` for the system ramdisk and zero it out.
-4.  **Mandatory Signature Handshake (Beef Check)**:
-    - Read the `uint32` at `0x1000000`.
-    - If `!= 0xDEADBEEF`, print "WHERES_THE_BEEF!" and halt via `hlt`.
-5.  **Termination**: Call `ExitBootServices` to finalize the transition to freestanding mode.
-6.  **Handover**: Execute the kernel by jumping to `0x1000004`, passing a pointer to the `boot_params_t` structure.
+- **Data Structure**: `static service_init_t registered_services[16]`.
+- **Logic**:
+  1. `register_service()` adds pointers to the initialization functions of each service (e.g., `console_init`, `memory_init`).
+  2. In `kernel_start`, a for-loop iterates through `registered_services` and executes each one.
+  3. This ensures that adding a new service only requires a single registration call in `main.c`, while the actual logic remains encapsulated in `/kernel/libs/`.
 
 ---
 
-## 3. Stage 2: The Kernel Ritual (`kernel/unice64/main.c`)
+## 2. Two-Stage Handover & Signature Handshake (`loader/entry.c`)
+The boot process transitions from a UEFI environment to a freestanding "God-Mode" kernel.
 
-The kernel architecture is strictly modular. `main.c` is the orchestrator and contains NO hardware logic.
-
-### 3.1 Service Registry
-A static array of initialization function pointers (`service_init_t`).
-- Services like `console_init`, `memory_init`, `diskman_init`, etc., are registered here.
-- The kernel loops through this array and calls each initialization function during the `EVENT_INIT` phase.
-
-### 3.2 Event System
-Defined in `kernel/libs/core/event.c`.
-- Uses a `trigger(event_type)` mechanism to notify registered services of system state changes.
-- **`EVENT_INIT`**: Bootstraps all services.
-- **`EVENT_MAIN`**: The primary execution loop.
-- **`EVENT_CLEANUP`** & **`EVENT_EXIT`**: Handles system termination.
+- **Stage 1 (UEFI Loader)**:
+  - Allocates 16MB at `0x1000000` for the kernel binary.
+  - Loads `kernel.bin` into that address.
+  - **The Handshake**: It reads the first 4 bytes at `0x1000000`. If they do not match `0xDEADBEEF`, it halts. This prevents executing uninitialized memory.
+  - **Jump**: It calls `ExitBootServices` and then performs a far jump to `0x1000004` (the instruction immediately following the signature).
+- **Stage 2 (The Kernel)**:
+  - Linked as a raw binary using `ld --oformat binary`.
+  - The entry point `kernel_start` is pinned to the `.text.kernel_start_func` section, which the linker places immediately after the signature in the final binary.
 
 ---
 
-## 4. Managed Memory: ARC Model (`kernel/libs/memory.c`)
+## 3. ARC Memory Model Implementation (`kernel/libs/memory.c`)
+The managed memory model is implemented using a prefix-header approach on a 32MB physical heap.
 
-OSx2 implements an **Automatic Reference Counting (ARC)** system. Every allocated pointer is prefixed with a 16-byte metadata header.
-
-### 4.1 ARC Header Structure
-```c
-typedef struct {
-    uint32 ref_count; // Number of active references
-    uint32 size;      // Size of the payload
-    uint64 magic;     // Must be 0x4152434D454D3031 ("ARCMEM01")
-} arc_header_t;
-```
-- **`alloc(size)`**: Increments the `heap_ptr` by `sizeof(arc_header_t) + size`, aligns to 16 bytes, and initializes `ref_count` to 1.
-- **`retain(ptr)`**: Increments `ref_count`.
-- **`release(ptr)`**: Decrements `ref_count`. If zero, the magic is cleared. (v0 uses a bump allocator, so memory is not yet recycled).
+- **Header Structure**: Every allocation is preceded by an `arc_header_t` (16 bytes aligned):
+  - `ref_count` (uint32): Number of active owners.
+  - `size` (uint32): Allocated payload size.
+  - `magic` (uint64): Set to `0x4152434D454D3031`.
+- **Allocation Algorithm**:
+  - Uses a **Bump Allocator**. A global `heap_ptr` tracks the next free byte.
+  - `alloc(n)` adds `16 + n` to `heap_ptr` (aligned to 16 bytes).
+- **Lifetime Management**:
+  - `retain()` and `release()` verify the `magic` number before modifying the `ref_count`.
+  - RSL functions like `readline()` automatically call `alloc()` and return the managed pointer to the user.
 
 ---
 
-## 5. Storage Stack: GPT & RNAFS (`kernel/libs/diskman.c`, `rnafs.c`)
+## 4. GPT Partition Table Compliance (`kernel/libs/diskman.c`)
+To support permanent storage, the kernel implements a GPT (GUID Partition Table) manager.
 
-### 5.1 GPT Partition Table
-The `diskman` service manages the GUID Partition Table at LBA 1 of the ramdisk.
-- **CRC32 Compliance**: After adding a partition, the service recomputes the `Partition Entry Array CRC` and the `GPT Header CRC`.
-- **Bootstrapping**: If LBA 1 does not contain the "EFI PART" signature, `diskman` initializes a blank GPT header and partition entry array.
-
-### 5.2 RNAFS v1 Specification
-A proprietary, high-speed filesystem for OSx2.
-- **Block Layout**:
-    - Block 0: Superblock (`magic=0x5346414E52`, `data_start=6`).
-    - Block 1: Allocation Bitmap (1 block).
-    - Blocks 2-5: Directory Entries (16 max).
-    - Blocks 6+: Data area.
-- **Directory Entry (128 bytes, packed)**:
-    - `name` (64s), `start_block` (Q), `size` (Q), `flags` (I), `padding` (44 bytes).
-- **Allocation**: `rnafs_write` performs a contiguous block search in the bitmap before writing.
+- **Initialization**: `diskman_init` reads LBA 1 (the GPT Header). If the signature matches "EFI PART", it loads the partition entry array from the LBA specified in the header.
+- **Modification**: When `diskman_add_partition` is called:
+  1. It finds an empty `gpt_entry_t` (all-zero GUID).
+  2. It populates the start/end LBAs and sets a placeholder GUID (`0x52 0x4E 0x41`).
+  3. **CRC32**: It recomputes the CRC32 of the entry array and the header using a bitwise CRC32 engine implemented in `kutils.c`.
+  4. It writes both the updated array and the header back to the physical disk (ramdisk).
 
 ---
 
-## 6. Console Graphics (`kernel/libs/console.c`)
+## 5. RNAFS Filesystem & Bitmap Allocation (`kernel/libs/rnafs.c`)
+RNAFS is the proprietary filesystem used for OSx2 storage.
 
-The console renders directly to the GOP framebuffer (`32-bit BGR/RGB`).
-- **Font Rendering**: Uses a manual 8x8 bitmap font (`font8x8_basic`).
-- **Vertical Scrolling**: When `cursor_y + 10 > height`, the service performs a memory copy of the framebuffer:
-  `memcpy(y, y + scroll_amount, pixels_per_scanline * 4)`.
-- **Themes**: Supports `CONFIG_EMERALD_MODE` for high-contrast neon green text.
+- **Layout**:
+  - **Block 0**: Superblock. Contains metadata offsets.
+  - **Block 1**: Allocation Bitmap. Each bit represents 1 block (512 bytes).
+  - **Blocks 2-5**: Directory entries.
+- **Write Logic**:
+  - `rnafs_write()` searches the Block 1 bitmap for a contiguous sequence of zero bits sufficient to store the file.
+  - It marks those bits as 1 and writes the file data to the corresponding blocks.
+  - It adds an entry to the directory: `name` (64 bytes), `start_block` (64-bit), `size` (64-bit).
 
 ---
 
-## 7. RSL Public API & Syscalls (`programs/libsystem.c`)
+## 6. RSL Library & Syscall Abstraction (`programs/libsystem.c`)
+User programs interact with the kernel through the **RTECH Standard Library (RSL)**.
 
-The **RTECH Standard Library (RSL)** is the interface for all user programs.
-- **`rsl_syscall_table_t`**: A struct of function pointers passed from the kernel to the program entry point (`_start`).
-- **`libsystem.c`**: Wraps these pointers into high-level C functions (e.g., `readline`, `str_create`, `lsfs`).
-- **Program Entry**:
-  ```c
-  void _start(boot_params_t* params, rsl_syscall_table_t* syscalls);
-  ```
-  The program receives the hardware state and the kernel API upon execution.
+- **Handover**: The kernel passes a `rsl_syscall_table_t` struct to the program's `_start` function.
+- **Wrappers**: `libsystem.c` stores this table in a global pointer. Functions like `print()` and `read_file()` are simple wrappers that check if the pointer in the table is non-null and call it.
+- **Independence**: This allows `shell.c` to be compiled without knowledge of kernel headers, strictly following the `ARCHITECTURE.md` rule.
+
+---
+
+## 7. Console Graphics & Font Rendering (`kernel/libs/console.c`)
+OSx2 implements a custom text rendering engine on top of the UEFI GOP framebuffer.
+
+- **Character Drawing**: `draw_char()` reads from a hardcoded 8x8 bitmap font (`font_data.c`). Each bit represents a pixel; if set, it writes the `fg_color` (RGB/BGR) to the corresponding `(x, y)` coordinate in the framebuffer.
+- **Scrolling**: Implemented in `scroll()`. It uses `memcpy` to move every row of pixels up by a fixed amount (usually 10 pixels for the 8x8 font + 2px padding), then clears the bottom-most row with `bg_color`.
+- **Theme Support**: The `console_init()` function checks for `CONFIG_EMERALD_MODE` to set the default neon-green color scheme.
+
+---
+
+## 8. PS/2 Keyboard Driver (`kernel/libs/input.c`)
+A freestanding input driver that bypasses UEFI once the kernel takes control.
+
+- **Polling Logic**: `input()` prompts the user and enters a loop that checks the PS/2 status register (Port 0x64).
+- **Scancode Translation**: It reads the data register (Port 0x60) and uses a translation table to convert Set 1 scancodes into ASCII characters.
+- **Interactive Echo**: The driver handles backspace (`\b`) by moving the console cursor back and overwriting the character with a space, providing a professional terminal experience.
