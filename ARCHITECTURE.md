@@ -27,6 +27,13 @@
 - Developers use `retain()` to increment and `release()` to decrement reference counts.
 - **Note:** In the current v0.x implementation, the backing store is a high-speed bump allocator. While ref-counts are tracked, memory is not yet recycled for reuse. Manual `release()` calls are currently required for future-proofing and consistency with the RSL standard.
 
+## 5. Storage Architecture (/CONNECT & VDISK)
+- **Source of Truth**: The `/CONNECT` registry tracks all physical storage (Platters, RAM, USB).
+- **Physical nodes**: Each device node has a configuration defining its Sector Size and Total LBA.
+- **VDISK Suit**: A Virtual Disk abstraction layer that provides relative LBA access.
+- **Signature Handshake**: VDISKs must contain the `0xDEADBEEF` signature at LBA 0 to be considered valid for mounting.
+- **Error Handling**: Missing hardware or signature mismatches trigger a `CANNOT FIND DISK` or `Access Denied` error.
+
 ## 5. Console & Input
 - Console supports full vertical scrolling and manual 8x8 font rendering to the GOP framebuffer.
 - Advanced color selection is supported via `color(fg, bg)`.

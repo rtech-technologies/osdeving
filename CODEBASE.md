@@ -45,29 +45,21 @@ The managed memory model is implemented using a prefix-header approach on a 32MB
 
 ---
 
-## 4. GPT Partition Table Compliance (`kernel/libs/diskman.c`)
-To support permanent storage, the kernel implements a GPT (GUID Partition Table) manager.
+## 4. Connection Registry & VDISK Suit (`kernel/libs/connect.c`, `vdisk.c`)
+To support diverse storage hardware, the kernel uses a virtualized I/O layer.
 
-- **Initialization**: `diskman_init` reads LBA 1 (the GPT Header). If the signature matches "EFI PART", it loads the partition entry array from the LBA specified in the header.
-- **Modification**: When `diskman_add_partition` is called:
-  1. It finds an empty `gpt_entry_t` (all-zero GUID).
-  2. It populates the start/end LBAs and sets a placeholder GUID (`0x52 0x4E 0x41`).
-  3. **CRC32**: It recomputes the CRC32 of the entry array and the header using a bitwise CRC32 engine implemented in `kutils.c`.
-  4. It writes both the updated array and the header back to the physical disk (ramdisk).
+- **`/CONNECT` Registry**: `connect.c` tracks physical devices (DISK, RAM, USB). Each node defines its physical sector size and capacity.
+- **VDISK Suit**: `vdisk.c` provides a Virtual Disk abstraction. It maps relative LBAs to physical offsets.
+- **Handshake**: `vdisk_mount_verify()` enforces the `0xDEADBEEF` signature check at LBA 0 of every virtual disk before allowing access.
+- **Error Handling**: Implements the "CANNOT FIND DISK" logic for disconnected hardware or signature mismatches.
 
 ---
 
-## 5. RNAFS Filesystem & Bitmap Allocation (`kernel/libs/rnafs.c`)
-RNAFS is the proprietary filesystem used for OSx2 storage.
+## 5. GPT Compliance & RNAFS Virtualization (`diskman.c`, `rnafs.c`)
+The high-level storage services now operate strictly through the VDISK layer.
 
-- **Layout**:
-  - **Block 0**: Superblock. Contains metadata offsets.
-  - **Block 1**: Allocation Bitmap. Each bit represents 1 block (512 bytes).
-  - **Blocks 2-5**: Directory entries.
-- **Write Logic**:
-  - `rnafs_write()` searches the Block 1 bitmap for a contiguous sequence of zero bits sufficient to store the file.
-  - It marks those bits as 1 and writes the file data to the corresponding blocks.
-  - It adds an entry to the directory: `name` (64 bytes), `start_block` (64-bit), `size` (64-bit).
+- **GPT Compliance**: `diskman.c` manages GUID Partition Tables and recomputes CRC32 for headers and entry arrays. It creates VDISKs (e.g., `PART0`) for each partition.
+- **RNAFS Logic**: `rnafs.c` implements bitmap-based contiguous allocation. Crucially, it no longer talks to physical memory; it performs all I/O via `vdisk_read` and `vdisk_write`, ensuring the same code works for RAM disks and future USB storage.
 
 ---
 

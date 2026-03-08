@@ -1,11 +1,11 @@
 #include "rnafs.h"
-#include "disk.h"
+#include "vdisk.h"
 #include "console.h"
 #include "kutils.h"
 #include "../unice64/kernel.h"
 #include "../../include/rsl.h"
 
-static uint32 mounted_lba = 0;
+static vdisk_t* active_vd = (void*)0;
 static rnafs_superblock_t active_sb;
 static int is_mounted = 0;
 
@@ -13,7 +13,10 @@ void rnafs_init() {
     is_mounted = 0;
 }
 
-void rnafs_format_partition(uint32 start_lba, uint32 size_sectors) {
+void rnafs_format_vdisk(const char* vdisk_name, uint32 size_sectors) {
+    vdisk_t* vd = vdisk_open(vdisk_name);
+    if (!vd) return;
+
     rnafs_superblock_t sb;
     sb.magic = RNAFS_MAGIC;
     sb.total_blocks = size_sectors;
@@ -22,37 +25,40 @@ void rnafs_format_partition(uint32 start_lba, uint32 size_sectors) {
     sb.dir_start = 2;
     sb.dir_blocks = 4;
     sb.data_start = 6;
-    write_sectors(start_lba, 1, &sb);
+    vdisk_write(vd, 0, 1, &sb);
 
     uint8 block[512];
     memset(block, 0, 512);
 
     /* Bitmap: mark metadata blocks (0-5) as used */
     block[0] = 0x3F; /* 00111111 */
-    write_sectors(start_lba + (uint32)sb.bitmap_start, 1, block);
+    vdisk_write(vd, (uint32)sb.bitmap_start, 1, block);
 
     /* Directory & Data Initialization */
     memset(block, 0, 512);
     for (int i = (int)sb.dir_start; i < (int)sb.data_start; i++) {
-        write_sectors(start_lba + (uint32)i, 1, block);
+        vdisk_write(vd, (uint32)i, 1, block);
     }
 }
 
-void rnafs_mount_partition(uint32 start_lba) {
-    if (read_sectors(start_lba, 1, &active_sb)) {
+void rnafs_mount_vdisk(const char* vdisk_name) {
+    vdisk_t* vd = vdisk_open(vdisk_name);
+    if (!vd) return;
+
+    if (vdisk_read(vd, 0, 1, &active_sb)) {
         if (active_sb.magic == RNAFS_MAGIC) {
-            mounted_lba = start_lba;
+            active_vd = vd;
             is_mounted = 1;
-            print("RNAFS: Mounted.\n");
+            print("RNAFS: Mounted via VDISK Suit.\n");
         }
     }
 }
 
 void rnafs_ls() {
-    if (!is_mounted) return;
+    if (!is_mounted || !active_vd) return;
     rnafs_entry_t entries[RNAFS_MAX_FILES];
     memset(entries, 0, sizeof(entries));
-    if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return;
+    if (!vdisk_read(active_vd, (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return;
     print("Files:\n");
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0) {
@@ -64,16 +70,16 @@ void rnafs_ls() {
 }
 
 INTN rnafs_read(const char* path, void* buffer, uint64 max_size) {
-    if (!is_mounted) return -1;
+    if (!is_mounted || !active_vd) return -1;
     rnafs_entry_t entries[RNAFS_MAX_FILES];
     memset(entries, 0, sizeof(entries));
-    if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
+    if (!vdisk_read(active_vd, (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
             uint64 size = entries[i].size;
             if (size > max_size) size = max_size;
             uint32 blocks = (uint32)((size + 511) / 512);
-            if (read_sectors(mounted_lba + entries[i].start_block, blocks, buffer)) {
+            if (vdisk_read(active_vd, entries[i].start_block, blocks, buffer)) {
                 return (INTN)size;
             }
         }
@@ -82,14 +88,14 @@ INTN rnafs_read(const char* path, void* buffer, uint64 max_size) {
 }
 
 INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
-    if (!is_mounted) return -1;
+    if (!is_mounted || !active_vd) return -1;
 
     rnafs_entry_t entries[RNAFS_MAX_FILES];
     memset(entries, 0, sizeof(entries));
-    if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
+    if (!vdisk_read(active_vd, (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
 
     uint8 bitmap[512];
-    if (!read_sectors(mounted_lba + (uint32)active_sb.bitmap_start, 1, bitmap)) return -1;
+    if (!vdisk_read(active_vd, (uint32)active_sb.bitmap_start, 1, bitmap)) return -1;
 
     uint32 blocks_needed = (uint32)((size + 511) / 512);
     int entry_idx = -1;
@@ -137,15 +143,15 @@ INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
     }
 
     /* Write Data */
-    if (!write_sectors(mounted_lba + (uint32)start_block, blocks_needed, buffer)) return -1;
+    if (!vdisk_write(active_vd, (uint32)start_block, blocks_needed, buffer)) return -1;
 
     /* Update Directory & Bitmap */
     strcpy(entries[entry_idx].name, path);
     entries[entry_idx].start_block = start_block;
     entries[entry_idx].size = size;
 
-    write_sectors(mounted_lba + (uint32)active_sb.bitmap_start, 1, bitmap);
-    write_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
+    vdisk_write(active_vd, (uint32)active_sb.bitmap_start, 1, bitmap);
+    vdisk_write(active_vd, (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries);
 
     return (INTN)size;
 }

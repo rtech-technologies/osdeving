@@ -4,6 +4,8 @@
 #include "../libs/kutils.h"
 #include "../libs/memory.h"
 #include "../libs/input.h"
+#include "../libs/connect.h"
+#include "../libs/vdisk.h"
 #include "../libs/disk.h"
 #include "../libs/diskman.h"
 #include "../libs/fs.h"
@@ -44,6 +46,8 @@ void kernel_start(boot_params_t* params) {
     register_service(console_init);
     register_service(memory_init);
     register_service(input_init);
+    register_service(connect_init);
+    register_service(vdisk_init);
     register_service(disk_init);
     register_service(diskman_init);
     register_service(fs_init);
