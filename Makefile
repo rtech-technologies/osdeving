@@ -30,7 +30,7 @@ CFLAGS_EFI = $(CFLAGS_COMMON) -fpic -fshort-wchar -DEFI_FUNCTION_WRAPPER
 CFLAGS_KERNEL = $(CFLAGS_COMMON) -I$(LIBS_DIR) -I$(LIBS_DIR)/core -I$(KERNEL_DIR) -ffreestanding
 
 LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
-LDFLAGS_KERNEL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary
+LDFLAGS_KERNEL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary --defsym=KERNEL_BASE=$(CONFIG_KERNEL_BASE)
 LDFLAGS_SHELL = -nostdlib -T programs/linker.ld --oformat binary
 
 LIBS_EFI = -lefi -lgnuefi

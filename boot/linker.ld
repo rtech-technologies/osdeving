@@ -1,7 +1,7 @@
 ENTRY(kernel_start)
 SECTIONS
 {
-    . = 0x1000000;
+    . = KERNEL_BASE;
     .text : {
         KEEP(*(.text.kernel_start))
         KEEP(*(.text.kernel_start_func))
