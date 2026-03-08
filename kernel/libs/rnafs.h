@@ -17,15 +17,15 @@ typedef struct {
     uint64 data_start;
 } rnafs_superblock_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     char name[64];
     uint64 start_block;
     uint64 size;
     uint32 flags;
-    uint32 padding;
+    uint8 padding[44];
 } rnafs_entry_t;
 
-#define RNAFS_MAX_FILES 64
+#define RNAFS_MAX_FILES 16
 
 void rnafs_init();
 void rnafs_format_partition(uint32 start_lba, uint32 size_sectors);

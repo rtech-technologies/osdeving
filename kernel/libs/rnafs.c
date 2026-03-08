@@ -51,7 +51,8 @@ void rnafs_mount_partition(uint32 start_lba) {
 void rnafs_ls() {
     if (!is_mounted) return;
     rnafs_entry_t entries[RNAFS_MAX_FILES];
-    if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return;
+    memset(entries, 0, sizeof(entries));
+    if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return;
     print("Files:\n");
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0) {
@@ -65,7 +66,8 @@ void rnafs_ls() {
 INTN rnafs_read(const char* path, void* buffer, uint64 max_size) {
     if (!is_mounted) return -1;
     rnafs_entry_t entries[RNAFS_MAX_FILES];
-    if (!read_sectors(mounted_lba + active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
+    memset(entries, 0, sizeof(entries));
+    if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
             uint64 size = entries[i].size;
@@ -83,6 +85,7 @@ INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
     if (!is_mounted) return -1;
 
     rnafs_entry_t entries[RNAFS_MAX_FILES];
+    memset(entries, 0, sizeof(entries));
     if (!read_sectors(mounted_lba + (uint32)active_sb.dir_start, (uint32)active_sb.dir_blocks, entries)) return -1;
 
     uint8 bitmap[512];

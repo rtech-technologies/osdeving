@@ -75,10 +75,19 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
                     while(1);
                 }
 
-                /* Load Shell at 48MB (Ramdisk) */
-                status = load_file(SystemTable, root, L"shell.bin", 0x3000000, &params.ramdisk_size);
+                /* Load Shell at 48MB */
+                status = load_file(SystemTable, root, L"shell.bin", 0x3000000, (void*)0);
+
+                /* Allocate System Disk (Ramdisk) at 64MB */
+                params.ramdisk_size = 16 * 1024 * 1024;
+                EFI_PHYSICAL_ADDRESS disk_addr = 0x4000000;
+                UINTN disk_pages = (params.ramdisk_size + 4095) / 4096;
+                status = SystemTable->BootServices->AllocatePages(2, 2, disk_pages, &disk_addr);
                 if (status == EFI_SUCCESS) {
-                    params.ramdisk_base = (void*)0x3000000;
+                    params.ramdisk_base = (void*)disk_addr;
+                    /* Zero the disk */
+                    uint8* p = (uint8*)params.ramdisk_base;
+                    for (uint64 i = 0; i < params.ramdisk_size; i++) p[i] = 0;
                 }
             }
         }
@@ -98,7 +107,16 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         while(1);
     }
 
-    /* 4. Exit Boot Services */
+    /* 4. The Beef Check */
+    uint32 signature = *(volatile uint32*)0x1000000;
+    if (signature != 0xDEADBEEF) {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut, L"WHERES_THE_BEEF! Checked: 0x1000000 | Found: ");
+        print_hex(SystemTable, signature);
+        SystemTable->ConOut->OutputString(SystemTable->ConOut, L" | Expected: 0xDEADBEEF\r\n");
+        while(1) { __asm__ volatile("hlt"); }
+    }
+
+    /* 5. Exit Boot Services */
     UINTN map_size = 0, map_key = 0, descriptor_size = 0;
     uint32 descriptor_version = 0;
     SystemTable->BootServices->GetMemoryMap(&map_size, (void*)0, &map_key, &descriptor_size, &descriptor_version);
@@ -107,8 +125,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     if (SystemTable->BootServices->AllocatePool(2, map_size, &map_buffer) == EFI_SUCCESS) {
         if (SystemTable->BootServices->GetMemoryMap(&map_size, map_buffer, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
             if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
-                /* Handover */
-                void (*kernel_start)(boot_params_t*) = (void (*)(boot_params_t*))0x1000000;
+                /* Handover (Jump skipping the signature) */
+                void (*kernel_start)(boot_params_t*) = (void (*)(boot_params_t*))0x1000004;
                 kernel_start(&params);
             }
         }

@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "../../include/rsl.h"
 #include "../libs/console.h"
 #include "../libs/kutils.h"
 #include "../libs/memory.h"
@@ -9,7 +10,6 @@
 #include "../libs/rnafs.h"
 #include "../libs/loader.h"
 #include "../libs/core/event.h"
-#include "../../include/rsl.h"
 
 boot_params_t kboot_params;
 int running = 1;
@@ -29,9 +29,15 @@ void exit_kernel() {
 }
 
 /*
+ * Mandatory Signature Handshake (Stage 2)
+ */
+__attribute__((section(".text.kernel_start"), used))
+volatile uint32 signature = 0xDEADBEEF;
+
+/*
  * The God-Machine Entry Point (Stage 2)
  */
-__attribute__((section(".text.kernel_start")))
+__attribute__((section(".text.kernel_start_func")))
 void kernel_start(boot_params_t* params) {
     kboot_params = *params;
 

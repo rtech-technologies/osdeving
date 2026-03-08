@@ -112,13 +112,25 @@ $(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
 programs/%.o: programs/%.c $(HEADERS)
 	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
 
-# Advanced Tools
+# Advanced Tools: Create Bootable UEFI Disk Image
 disk: all
+	@echo "Creating bootable UEFI disk image..."
 	dd if=/dev/zero of=disk.img bs=1M count=64
-	python3 scripts/rnafs_tool.py disk.img format
-	python3 scripts/rnafs_tool.py disk.img add $(BOOT_DIR)/shell.bin shell.bin
+	mformat -i disk.img -F -v "OSX2" ::
+	mmd -i disk.img ::/EFI
+	mmd -i disk.img ::/EFI/BOOT
+	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img $(BOOT_DIR)/kernel.bin ::/kernel.bin
-	@echo "OSx2 Pro Disk Image Ready."
+	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/shell.bin
+	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
+
+# Advanced Tools: Create Bootable UEFI Disk Image
+run: disk
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=disk.img -m 256M -serial stdio
+
+setup:
+	sudo apt-get update
+	sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf mtools dosfstools
 
 update: clean all
 	@echo "OSx2 System Update Complete."

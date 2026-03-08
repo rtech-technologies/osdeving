@@ -42,3 +42,16 @@ void itoa(int n, char* s, int base) {
         *p2-- = tmp;
     }
 }
+
+uint32 crc32(const void* data, uint64 len) {
+    uint32 crc = 0xFFFFFFFF;
+    const uint8* p = (const uint8*)data;
+    while (len--) {
+        crc ^= *p++;
+        for (int i = 0; i < 8; i++) {
+            if (crc & 1) crc = (crc >> 1) ^ 0xEDB88320;
+            else crc >>= 1;
+        }
+    }
+    return ~crc;
+}
