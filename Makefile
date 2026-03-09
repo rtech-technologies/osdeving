@@ -46,6 +46,8 @@ KERNEL_OBJS = $(KERNEL_DIR)/main.o \
               $(LIBS_DIR)/console.o \
               $(LIBS_DIR)/font_data.o \
               $(LIBS_DIR)/input.o \
+              $(LIBS_DIR)/connect.o \
+              $(LIBS_DIR)/vdisk.o \
               $(LIBS_DIR)/disk.o \
               $(LIBS_DIR)/diskman.o \
               $(LIBS_DIR)/memory.o \

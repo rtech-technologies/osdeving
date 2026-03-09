@@ -58,6 +58,7 @@ void kernel_start(boot_params_t* params) {
     }
 
     print("OSx2 God-Mode: Kernel Handover Successful.\n");
+    debug_memory_at_B0000();
     trigger(EVENT_INIT);
 
     rsl_syscall_table_t syscalls = {

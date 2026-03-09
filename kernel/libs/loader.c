@@ -1,10 +1,32 @@
 #include "loader.h"
 #include "console.h"
+#include "vdisk.h"
 #include "fs.h"
 #include "memory.h"
+#include "kutils.h"
 #include "../unice64/kernel.h"
 
 void loader_init() {
+}
+
+void wheres_the_beef() {
+    print("WHERES_THE_BEEF! Memory corruption or uninitialized jump detected.\n");
+    print("Checked: 0xB0000 | Protocol: Triggered\n");
+    while(1) { __asm__ volatile("hlt"); }
+}
+
+void debug_memory_at_B0000() {
+    uint32* ptr = (uint32*)0xB0000;
+    /* Basic check for common uninitialized RAM patterns */
+    if (*ptr == 0x00000000 || *ptr == 0xFFFFFFFF) {
+        wheres_the_beef();
+    }
+
+    print("Diagnostic: Memory at 0xB0000 = ");
+    char buf[16];
+    itoa((int)*ptr, buf, 16);
+    print(buf);
+    print("\n");
 }
 
 void loader_run_shell(rsl_syscall_table_t* syscalls) {

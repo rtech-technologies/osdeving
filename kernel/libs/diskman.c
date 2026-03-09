@@ -1,5 +1,6 @@
 #include "diskman.h"
 #include "disk.h"
+#include "vdisk.h"
 #include "console.h"
 #include "rnafs.h"
 #include "kutils.h"

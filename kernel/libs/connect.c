@@ -21,6 +21,12 @@ void connect_init() {
     ram0.total_lba = kboot_params.ramdisk_size / 512;
     ram0.base_addr = kboot_params.ramdisk_base;
     ram0.is_active = 1;
+
+    /* ARA Collision Check: Ensure ramdisk doesn't overlap low memory or kernel */
+    if ((uint64)ram0.base_addr < 0x1000000) {
+        print("CONNECT: ARA Collision Detected (Low Memory Area).\n");
+    }
+
     connect_register_device("/CONNECT/RAM0/", ram0);
 
     /* Register Placeholder USB */
