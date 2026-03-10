@@ -1,7 +1,7 @@
 ENTRY(_start)
 SECTIONS
 {
-    . = 0x0; /* Raw binary, will be loaded into an allocated buffer */
+    . = 0x3000000; /* Linked to match Stage 1 load address */
     .text : {
         KEEP(*(.text._start))
         *(.text*)

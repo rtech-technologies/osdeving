@@ -15,6 +15,8 @@ typedef struct {
     uint32  pixels_per_scanline;
     void*   ramdisk_base;
     uint64  ramdisk_size;
+    void*   shell_base;
+    uint64  shell_size;
     void*   heap_base;
     uint64  heap_size;
     void*   SystemTable;

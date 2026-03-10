@@ -76,7 +76,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
                 }
 
                 /* Load Shell at 48MB */
-                status = load_file(SystemTable, root, L"shell.bin", 0x3000000, (void*)0);
+                status = load_file(SystemTable, root, L"shell.bin", 0x3000000, &params.shell_size);
+                if (status == EFI_SUCCESS) {
+                    params.shell_base = (void*)0x3000000;
+                }
 
                 /* Allocate System Disk (Ramdisk) at 64MB */
                 params.ramdisk_size = 16 * 1024 * 1024;

@@ -126,6 +126,14 @@ disk: all
 	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/shell.bin
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
 
+iso: disk
+	mkdir -p iso_root/EFI/BOOT
+	cp $(EFI_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
+	cp $(BOOT_DIR)/kernel.bin iso_root/
+	cp $(BOOT_DIR)/shell.bin iso_root/
+	xorriso -as mkisofs -R -f -e disk.img -no-emul-boot -o boot.iso iso_root
+	rm -rf iso_root
+
 # Advanced Tools: Create Bootable UEFI Disk Image
 run: disk
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=disk.img -m 256M -serial stdio

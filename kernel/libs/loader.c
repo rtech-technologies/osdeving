@@ -16,13 +16,13 @@ void wheres_the_beef() {
 }
 
 void debug_memory_at_B0000() {
-    uint32* ptr = (uint32*)0xB0000;
+    uint32* ptr = (uint32*)0x1000000;
     /* Basic check for common uninitialized RAM patterns */
     if (*ptr == 0x00000000 || *ptr == 0xFFFFFFFF) {
         wheres_the_beef();
     }
 
-    print("Diagnostic: Memory at 0xB0000 = ");
+    print("Diagnostic: Memory at 0x1000000 = ");
     char buf[16];
     itoa((int)*ptr, buf, 16);
     print(buf);
@@ -31,17 +31,13 @@ void debug_memory_at_B0000() {
 
 void loader_run_shell(rsl_syscall_table_t* syscalls) {
     #ifdef CONFIG_LOAD_SHELL
-    /* Stage 2 Loader: Load shell.bin from disk using kernel drivers */
-    char* shell_buf = (char*)alloc(65536);
-    if (shell_buf) {
-        /* Use fread (kernel-side) instead of read_file (RSL-side) */
-        if (fread("shell.bin", shell_buf, 65536) > 0) {
-             void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*) =
-                (void (*)(boot_params_t*, rsl_syscall_table_t*))shell_buf;
-             shell_entry(&kboot_params, syscalls);
-        } else {
-             print("Loader: shell.bin not found on disk. (Is RNAFS mounted?)\n");
-        }
+    /* Stage 2 Loader: Run shell.bin already placed in memory by Stage 1 */
+    if (kboot_params.shell_base) {
+        void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*) =
+            (void (*)(boot_params_t*, rsl_syscall_table_t*))kboot_params.shell_base;
+        shell_entry(&kboot_params, syscalls);
+    } else {
+        print("Loader: shell.bin not found in memory handover.\n");
     }
     #else
     print("Loader: Auto-load shell disabled by config.\n");

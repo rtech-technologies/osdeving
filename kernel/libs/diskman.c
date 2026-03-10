@@ -10,11 +10,14 @@ static gpt_header_t current_gpt;
 static gpt_entry_t  entries[128];
 
 void diskman_init() {
+    /* For v0 memory disk, we skip GPT auto-init if signature isn't found to avoid FAT corruption */
     if (read_sectors(1, 1, &current_gpt)) {
         if (current_gpt.signature == GPT_SIGNATURE) {
             read_sectors(current_gpt.partition_entry_lba,
                          (current_gpt.num_partition_entries * current_gpt.size_partition_entry + 511) / 512,
                          entries);
+        } else {
+             print("Diskman: No GPT found on ramdisk.\n");
         }
     }
 }
