@@ -1,107 +1,158 @@
-# OSx2 (RTECH dos) Technical Implementation Guide (CODEBASE.md)
+# OSx2 (RTECH dos) Technical Implementation Blueprint (CODEBASE.md)
 
-This document provides a granular, file-by-file technical breakdown of the OSx2 codebase. It explains the purpose of each file and the specific code logic used to implement the system architecture.
-
----
-
-## 1. Boot & Loader (`/loader`, `/boot`)
-
-### `loader/entry.c` (Stage 1 Entry)
-- **Purpose**: Transitions from UEFI firmware to the freestanding Stage 2 kernel.
-- **Implementation**:
-    - **Hardware Discovery**: Uses `ST->BootServices->LocateProtocol` to find `EFI_GRAPHICS_OUTPUT_PROTOCOL` (GOP). It stores the framebuffer base and resolution in a `boot_params_t` struct.
-    - **Shell Preparation**: Loads `shell.bin` into memory at `0x3000000` and records the pointer in `boot_params_t` for the kernel.
-    - **Binary Loading**: Opens the root FAT32 volume using `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL`. It uses `AllocatePages` (Type 2, EfiLoaderCode) to reserve physical memory at `0x1000000` (Kernel) and `0x3000000` (Shell).
-    - **Beef Check Handshake**: Before jumping, it reads `*(volatile uint32*)0x1000000`. If it is not `0xDEADBEEF`, it prints "WHERES_THE_BEEF!" and halts.
-    - **Transition**: Calls `ExitBootServices` to reclaim firmware control and performs a far jump to `0x1000004`, passing the `boot_params_t` pointer.
-
-### `boot/linker.ld` (Kernel Linker Script)
-- **Purpose**: Defines the layout of the `kernel.bin` raw binary.
-- **Implementation**:
-    - Uses `ENTRY(kernel_start)` to define the entry point.
-    - Sets the origin to `KERNEL_BASE` (passed via `--defsym` from the Makefile).
-    - Uses `KEEP(*(.text.kernel_start))` to ensure the `0xDEADBEEF` signature is placed at offset 0.
-    - Uses `KEEP(*(.text.kernel_start_func))` to ensure the entry function follows immediately at offset 4.
-
-### `boot/efi_types.h` (UEFI Abstraction)
-- **Purpose**: Minimal UEFI type definitions to avoid dependency on large headers like `efi.h`.
-- **Implementation**: Defines basic UEFI structs (`EFI_SYSTEM_TABLE`, `EFI_BOOT_SERVICES`) and the `EFIAPI` calling convention (`ms_abi`).
+This document provides an exhaustive, low-level technical specification of the OSx2 codebase. It describes the implementation logic of every file with enough detail to allow for a complete system reconstruction.
 
 ---
 
-## 2. Kernel Core (`/kernel/unice64`)
+## 1. Boot & Handover Layer (`/loader`, `/boot`)
 
-### `kernel/unice64/main.c` (Kernel Ritual)
-- **Purpose**: Service orchestration and event loop.
-- **Implementation**:
-    - **Hardware Handover**: Immediately initializes a dedicated kernel stack and reloads the GDT to fully exit the UEFI environment.
-    - **Service Registry**: Maintains a `registered_services` array. It uses `register_service(InitFunc)` to add initialization routines (Console, Memory, etc.).
-    - **Initialization Loop**: In `kernel_start`, it iterates through the registry and executes each function.
-    - **Event System**: Triggers `EVENT_INIT` to bootstrap services and enters a `while(running)` loop that triggers `EVENT_MAIN`.
-    - **Syscall Handover**: Populates `rsl_syscall_table_t` with internal kernel function pointers and passes it to the program loader.
+### `loader/entry.c` (UEFI Stage 1)
+- **Purpose**: Transitions from UEFI (Microsoft x64 ABI) to the freestanding Stage 2 kernel.
+- **In-Code Logic**:
+    - **Protocols**: Calls `LocateProtocol` for `EFI_GRAPHICS_OUTPUT_PROTOCOL` to extract `FrameBufferBase`, `HorizontalResolution`, and `PixelsPerScanLine` into a `boot_params_t` struct.
+    - **Storage**: Uses `HandleProtocol` with `EFI_LOADED_IMAGE_PROTOCOL` to find the boot device handle, then `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL` to open the root volume.
+    - **Allocation**: Calls `AllocatePages` (Type 2: `EfiLoaderCode`) to reserve memory at `0x1000000` (Kernel) and `0x3000000` (Shell).
+    - **Memory Setup**: Manually loops to zero-fill the ramdisk area at `0x4000000` (16MB).
+    - **Handshake**: Reads `*(volatile uint32*)0x1000000`. If `!= 0xDEADBEEF`, it prints "WHERES_THE_BEEF!" and halts.
+    - **Exit**: Calls `ExitBootServices`.
+    - **Handover**: Executes `((void (*)(boot_params_t*))0x1000004)(params)`.
 
-### `kernel/unice64/gdt.c` (Memory Segments)
-- **Purpose**: Sets up the Global Descriptor Table for x86_64 long mode.
-- **Implementation**: Defines three entries: Null, 64-bit Code (Access 0x9A, Granularity 0x20), and 64-bit Data (Access 0x92). It loads the table using the `lgdt` assembly instruction.
+### `boot/linker.ld`
+- **Purpose**: Defines the physical layout of the Stage 2 kernel flat binary.
+- **In-Code Logic**:
+    - `. = KERNEL_BASE`: Sets origin (default `0x1000000`).
+    - `KEEP(*(.text.kernel_start))`: Forces the `0xDEADBEEF` signature to the absolute first 4 bytes.
+    - `KEEP(*(.text.kernel_start_func))`: Forces the entry code to the next 4 bytes.
+    - Resulting binary is a raw instruction stream linked for the 16MB offset.
+
+### `boot/efi_types.h`
+- **Purpose**: Minimal UEFI interface definition.
+- **In-Code Logic**: Defines `EFI_SYSTEM_TABLE` and `EFI_BOOT_SERVICES` structs with exact UEFI-spec padding. Uses `__attribute__((ms_abi))` for all function pointers to ensure compatibility with firmware calling conventions.
 
 ---
 
-## 3. Kernel Services (`/kernel/libs`)
+## 2. Kernel Core Layer (`/kernel/unice64`)
 
-### `kernel/libs/connect.c` (Connection Registry)
-- **Purpose**: The "Source of Truth" for storage hardware.
-- **Implementation**:
-    - **Registry**: Stores `physical_config_t` entries in a static array.
-    - **RAM0 Registration**: Initializes `/CONNECT/RAM0/` using `kboot_params.ramdisk_base` and `ramdisk_size`.
-    - **ARA Collision Detection**: Checks if `base_addr < 0x1000000` to alert of potential low-memory segment overlaps.
+### `kernel/unice64/main.c` (The Orchestrator)
+- **Purpose**: Kernel entry, service registry, and event loop.
+- **In-Code Logic**:
+    - **Stack Reload**: Immediately resets the stack: `asm volatile ("mov %0, %%rsp" : : "r"(0x2000000))`.
+    - **Service Registry**: `static service_init_t registered_services[16]` stores init pointers.
+    - **Handover**: Populates `rsl_syscall_table_t` with function pointers (e.g., `print`, `alloc`, `vdisk_read`) to be passed to user programs.
+    - **Event Loop**: Triggers `EVENT_INIT`, then enters `while(running) { trigger(EVENT_MAIN); }`.
 
-### `kernel/libs/vdisk.c` (The VDISK Suit)
+### `kernel/unice64/gdt.c`
+- **Purpose**: CPU segmentation for long mode.
+- **In-Code Logic**: Defines a static GDT with 3 entries: 0 (Null), 1 (Code: 0x9A access, 0x20 flags), and 2 (Data: 0x92 access). Loads via `lgdt` instruction.
+
+### `kernel/unice64/io.h`
+- **Purpose**: Hardware port primitives.
+- **In-Code Logic**: Wraps `inb` and `outb` instructions using inline assembly with "a" (AL) and "Nd" (DX/Imm) constraints.
+
+---
+
+## 3. Kernel Services Layer (`/kernel/libs`)
+
+### `kernel/libs/connect.c` & `connect.h`
+- **Purpose**: Physical hardware inventory.
+- **In-Code Logic**: Maintains `registry[8]` of `physical_config_t`. `connect_init` creates `/CONNECT/RAM0/` using the base/size provided by the loader. Includes overlap checks for the 1MB low-memory region.
+
+### `kernel/libs/vdisk.c` & `vdisk.h`
 - **Purpose**: Storage virtualization layer.
-- **Implementation**:
-    - **LBA Virtualization**: `vdisk_read/write` translate relative LBAs to physical addresses: `phys_lba = vd->start_lba + lba`.
-    - **Signature Verification**: `vdisk_mount_verify` reads LBA 0 of the virtual disk. If the first 4 bytes aren't `0xDEADBEEF`, it returns "CANNOT FIND DISK" and denies access.
+- **In-Code Logic**:
+    - **LBA Mapping**: `phys_lba = vd->start_lba + lba`. Boundary checks against `vd->end_lba`.
+    - **Security**: `vdisk_mount_verify` reads LBA 0; if the first 4 bytes are not `0xDEADBEEF`, it returns 0 (Access Denied).
 
-### `kernel/libs/memory.c` (ARC / ARA System)
-- **Purpose**: Python-like Automatic Reference Counting.
-- **Implementation**:
-    - **Bump Allocator**: Increments a global `heap_ptr` by `sizeof(arc_header_t) + size`, aligned to 16 bytes.
-    - **Ref-Counting**: `retain()` increments and `release()` decrements the `ref_count` in the `arc_header_t` prefix.
-    - **Magic Check**: Validates `0x4152434D454D3031` before any ref-count modification to ensure pointer integrity.
+### `kernel/libs/memory.c` & `memory.h` (ARC System)
+- **Purpose**: Reference-counted memory management.
+- **In-Code Logic**:
+    - **Header**: Every block starts with `arc_header_t` (uint32 ref_count, uint32 size, uint64 magic).
+    - **Allocation**: Bump-pointer `heap_ptr` increments by `(size + 16 + 15) & ~15` to ensure 16-byte alignment.
+    - **Safety**: `release()` zeros the magic `0x4152434D454D3031` when the refcount hits zero.
 
-### `kernel/libs/diskman.c` (GPT Compliance)
-- **Purpose**: Managed GUID Partition Table compliance.
-- **Implementation**:
-    - **CRC32 Recomputation**: After adding a partition, it recomputes the GPT Header CRC (`header_crc = 0; crc32(header, size)`) and the Entry Array CRC.
-    - **VDISK Creation**: Automatically opens a VDISK (e.g., `PART0`) for each partition found during init.
+### `kernel/libs/diskman.c` & `diskman.h`
+- **Purpose**: GPT compliance and VDISK bridging.
+- **In-Code Logic**:
+    - **GPT Engine**: Reads LBA 1. If "EFI PART" matches, it creates VDISKs (e.g., "PART0") for each valid entry.
+    - **CRC Engine**: Uses `crc32()` to recompute header (at offset 16) and entry array checksums after writes.
 
-### `kernel/libs/rnafs.c` (Proprietary Filesystem)
-- **Purpose**: Contiguous storage on VDISKs.
-- **Implementation**:
-    - **Bitmap Allocation**: `rnafs_write` scans the Block 1 bitmap for contiguous zero-bits. It uses a simple greedy algorithm to find space for the requested size.
-    - **Directory Entries**: Writes 128-byte packed structs to Blocks 2-5.
+### `kernel/libs/rnafs.c` & `rnafs.h`
+- **Purpose**: Contiguous filesystem on VDISKs.
+- **In-Code Logic**:
+    - **Bitmap**: Block 1 acts as a 4096-bit allocation map.
+    - **Greedy Alloc**: `rnafs_write` scans bits in Block 1 for a contiguous run of 0s equal to the file's sector count.
+    - **Directory**: Uses `__attribute__((packed))` on 128-byte `rnafs_entry_t` structs.
 
-### `kernel/libs/console.c` (Graphics Driver)
-- **Purpose**: Text rendering to GOP framebuffer.
-- **Implementation**:
-    - **Scrolling**: Uses `memcpy` to shift the entire framebuffer up by 10 pixels: `memcpy(fb, fb + row_size * 10, row_size * (height - 10))`.
-    - **Character Drawing**: Renders 8x8 glyphs from `font_data.c` by checking bits in the bitmap and writing `fg_color` to the corresponding framebuffer index.
+### `kernel/libs/console.c`, `font_data.c`, `font.h`
+- **Purpose**: GOP-based graphics text rendering.
+- **In-Code Logic**:
+    - **Drawing**: `draw_char` bit-tests `font8x8_basic[c][row]`. If set, it writes the 32-bit color to `framebuffer[(y+row)*scanline + (x+col)]`.
+    - **Scrolling**: `memcpy` shifts the framebuffer up by 10 rows.
 
-### `kernel/libs/input.c` (Keyboard Driver)
+### `kernel/libs/input.c` & `input.h`
 - **Purpose**: Freestanding PS/2 input.
-- **Implementation**: Polls Port `0x64` for status and reads scancodes from Port `0x60`. It uses a Set 1 lookup table for ASCII translation and manually handles backspace logic by overwriting characters with spaces.
+- **In-Code Logic**: Polls Port `0x64` (Status). If bit 0 is set, it reads the scancode from Port `0x60` and translates it using a Set 1 lookup table.
+
+### `kernel/libs/kutils.c` & `kutils.h`
+- **Purpose**: Internal utility library.
+- **In-Code Logic**: Bitwise CRC32 (polynomial `0xEDB88320`), pointer-offset `memcpy`/`memset`, and base-10/16 `itoa`.
+
+### `kernel/libs/loader.c` & `loader.h`
+- **Purpose**: Stage 2 Handover and execution of the user shell.
+- **In-Code Logic**:
+    - **Execution**: Takes the `shell_base` (0x3000000) from `boot_params_t` and casts it to a function pointer: `void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*)`.
+    - **Syscall Bridge**: Calls this entry point passing a pointer to the `rsl_syscall_table_t` populated in `main.c`.
+    - **Beef Diagnostic**: `debug_memory_at_B0000` (auditing 0x1000000) is called here to ensure no late-stage memory corruption before handover.
+
+### `kernel/libs/core/event.c` & `event.h`
+- **Purpose**: Asynchronous-style event notification system.
+- **In-Code Logic**:
+    - **Storage**: `static event_handler_t handlers[32]` array of function pointers.
+    - **Trigger**: `trigger(event_t event)` iterates from `0` to `handler_count - 1` and executes `handlers[i](event)`. This allows services to react to system lifecycle events (INIT, MAIN, CLEANUP) without tight coupling.
 
 ---
 
-## 4. RSL & User Programs (`/programs`, `/include`)
+## 4. User Programs Layer (`/programs`, `/include`)
 
-### `programs/libsystem.c` (RSL Core)
-- **Purpose**: Implementation of the RTECH Standard Library.
-- **Implementation**:
-    - **Relocation Alignment**: Linked at `0x3000000` to match the Stage 1 memory handover.
-    - **Bootstrapping**: Receives the `syscall_table` in `_start`.
-    - **Managed Strings**: `str_create` calls `alloc()` and `strcpy()` to create ARC-managed strings.
-    - **Interactive API**: `readline` uses the `input` syscall and returns a managed pointer.
+### `programs/libsystem.c` & `include/rsl.h`
+- **Purpose**: RTECH Standard Library implementation.
+- **In-Code Logic**: Caches the kernel's `rsl_syscall_table_t`. High-level functions (e.g., `readline`) check if the kernel pointer is valid before calling.
 
-### `programs/shell.c` (System Command UI)
-- **Purpose**: User interface for OSx2.
-- **Implementation**: Uses a `while(1)` loop calling `readline()`. Commands are parsed via `strcmp` and mapped to RSL functions like `format()`, `mount()`, and `lsfs()`.
+### `programs/shell.c`
+- **Purpose**: Interactive user shell.
+- **In-Code Logic**: `while(1)` loop calling `readline()`. Uses `strncmp` to route commands to RSL storage functions.
+
+### `programs/linker.ld`
+- **Purpose**: User-space linking.
+- **In-Code Logic**: Sets origin to `0x3000000` to match Stage 1 handover.
+
+---
+
+## 5. System Definitions (`/include`)
+
+### `include/types.h`
+- **Purpose**: Portable freestanding types.
+- **In-Code Logic**: Defines `uint8`, `uint16`, `uint32`, `uint64`, `INTN`, and `size_t`.
+
+### `include/config.h`
+- **Purpose**: Build settings.
+- **In-Code Logic**: Auto-generated by `menuconfig.py`.
+
+---
+
+## 6. Development Tools (`/scripts`, `/tools`, `Makefile`)
+
+### `scripts/menuconfig.py`
+- **Purpose**: Kernel configuration UI.
+- **In-Code Logic**: Uses `curses` to manage `.config`. Automatically generates `include/config.h`.
+
+### `scripts/rnafs_tool.py`
+- **Purpose**: Disk image builder.
+- **In-Code Logic**: Implements RNAFS bitmap and directory logic in Python to inject files.
+
+### `Makefile`
+- **Purpose**: System architect.
+- **In-Code Logic**:
+    - EFI: `-fpic -fshort-wchar -shared -Bsymbolic`.
+    - Kernel: `-ffreestanding -nostdlib --oformat binary --defsym=KERNEL_BASE=...`.
+    - Image: `mtools` and `xorriso` for ISO generation.

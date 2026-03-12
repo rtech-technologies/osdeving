@@ -29,4 +29,7 @@ extern boot_params_t kboot_params;
 /* Entry point defined in main.c */
 void kernel_start(boot_params_t* params);
 
+/* GDT initialization */
+void gdt_init(void);
+
 #endif
