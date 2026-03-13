@@ -11,11 +11,11 @@ This document provides an exhaustive, low-level technical specification of the O
 - **In-Code Logic**:
     - **Protocols**: Calls `LocateProtocol` for `EFI_GRAPHICS_OUTPUT_PROTOCOL` to extract `FrameBufferBase`, `HorizontalResolution`, and `PixelsPerScanLine` into a `boot_params_t` struct.
     - **Storage**: Uses `HandleProtocol` with `EFI_LOADED_IMAGE_PROTOCOL` to find the boot device handle, then `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL` to open the root volume.
-    - **Allocation**: Calls `AllocatePages` (Type 2: `EfiLoaderCode`) to reserve memory at `0x1000000` (Kernel) and `0x3000000` (Shell).
+    - **Allocation**: Calls `AllocatePages` (Type 2: `EfiLoaderCode`) to reserve 16MB at `CONFIG_KERNEL_BASE` (default `0x1000000`) and `0x3000000` (Shell).
     - **Memory Setup**: Manually loops to zero-fill the ramdisk area at `0x4000000` (16MB).
-    - **Handshake**: Reads `*(volatile uint32*)0x1000000`. If `!= 0xDEADBEEF`, it prints "WHERES_THE_BEEF!" and halts.
-    - **Exit**: Calls `ExitBootServices`.
-    - **Handover**: Executes `((void (*)(boot_params_t*))0x1000004)(params)`.
+    - **Handshake**: Reads `*(volatile uint32*)CONFIG_KERNEL_BASE`. If the value stored at that address is not `0xDEADBEEF`, it prints "WHERES_THE_BEEF!" via `OutputString` and enters a `hlt` loop.
+    - **Exit**: Calls `ExitBootServices(ImageHandle, map_key)` to terminate UEFI environment control.
+    - **Handover**: Executes a far jump by casting the entry address to a function pointer: `((void (*)(boot_params_t*))(CONFIG_KERNEL_BASE + 4))(params)`.
 
 ### `boot/linker.ld`
 - **Purpose**: Defines the physical layout of the Stage 2 kernel flat binary.
@@ -36,7 +36,7 @@ This document provides an exhaustive, low-level technical specification of the O
 ### `kernel/unice64/main.c` (The Orchestrator)
 - **Purpose**: Kernel entry, service registry, and event loop.
 - **In-Code Logic**:
-    - **Stack Reload**: Immediately resets the stack: `asm volatile ("mov %0, %%rsp" : : "r"(0x2000000))`.
+    - **Stack Reset**: Resets the stack pointer to the top of the kernel reservation area: `asm volatile ("mov %0, %%rsp" : : "r"(CONFIG_KERNEL_BASE + 16MB))`.
     - **Service Registry**: `static service_init_t registered_services[16]` stores init pointers.
     - **Handover**: Populates `rsl_syscall_table_t` with function pointers (e.g., `print`, `alloc`, `vdisk_read`) to be passed to user programs.
     - **Event Loop**: Triggers `EVENT_INIT`, then enters `while(running) { trigger(EVENT_MAIN); }`.

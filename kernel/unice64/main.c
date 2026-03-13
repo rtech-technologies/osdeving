@@ -41,8 +41,8 @@ volatile uint32 signature = 0xDEADBEEF;
  */
 __attribute__((section(".text.kernel_start_func")))
 void kernel_start(boot_params_t* params) {
-    /* Setup Kernel Stack (1MB above kernel) */
-    uint64 stack_top = (uint64)0x1000000 + (16 * 1024 * 1024);
+    /* Setup Kernel Stack (Top of kernel reservation) */
+    uint64 stack_top = (uint64)CONFIG_KERNEL_BASE + (16 * 1024 * 1024);
     __asm__ volatile ("mov %0, %%rsp" : : "r"(stack_top));
 
     kboot_params = *params;

@@ -16,13 +16,17 @@ void wheres_the_beef() {
 }
 
 void debug_memory_at_B0000() {
-    uint32* ptr = (uint32*)0x1000000;
+    uint32* ptr = (uint32*)CONFIG_KERNEL_BASE;
     /* Basic check for common uninitialized RAM patterns */
     if (*ptr == 0x00000000 || *ptr == 0xFFFFFFFF) {
         wheres_the_beef();
     }
 
-    print("Diagnostic: Memory at 0x1000000 = ");
+    print("Diagnostic: Memory at ");
+    char addr_buf[16];
+    itoa(CONFIG_KERNEL_BASE, addr_buf, 16);
+    print(addr_buf);
+    print(" = ");
     char buf[16];
     itoa((int)*ptr, buf, 16);
     print(buf);

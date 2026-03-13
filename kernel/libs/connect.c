@@ -23,7 +23,7 @@ void connect_init() {
     ram0.is_active = 1;
 
     /* ARA Collision Check: Ensure ramdisk doesn't overlap low memory or kernel */
-    if ((uint64)ram0.base_addr < 0x1000000) {
+    if ((uint64)ram0.base_addr < CONFIG_KERNEL_BASE) {
         print("CONNECT: ARA Collision Detected (Low Memory Area).\n");
     }
 

@@ -1,5 +1,6 @@
 #include "../boot/efi_types.h"
 #include "../include/rsl.h"
+#include "../include/config.h"
 
 static EFI_GUID li_g = {0x5B1B31A1, 0x9562, 0x11D2, {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
 static EFI_GUID fs_g = {0x964E5B22, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
@@ -67,8 +68,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         if (status == EFI_SUCCESS) {
             status = fs->OpenVolume(fs, &root);
             if (status == EFI_SUCCESS) {
-                /* Load Kernel at 16MB */
-                status = load_file(SystemTable, root, L"kernel.bin", 0x1000000, (void*)0);
+                /* Load Kernel at configured base */
+                status = load_file(SystemTable, root, L"kernel.bin", CONFIG_KERNEL_BASE, (void*)0);
                 if (status != EFI_SUCCESS) {
                     SystemTable->ConOut->OutputString(SystemTable->ConOut, L"Error loading kernel.bin: ");
                     print_hex(SystemTable, status);
@@ -96,9 +97,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
-    /* 3. Allocate Heap at 32MB */
-    UINTN heap_size = 8 * 1024 * 1024;
-    EFI_PHYSICAL_ADDRESS heap_addr = 0x2000000;
+    /* 3. Allocate Heap */
+    UINTN heap_size = (UINTN)CONFIG_HEAP_SIZE_MB * 1024 * 1024;
+    EFI_PHYSICAL_ADDRESS heap_addr = CONFIG_HEAP_BASE;
     UINTN heap_pages = (heap_size + 4095) / 4096;
     status = SystemTable->BootServices->AllocatePages(2, 2, heap_pages, &heap_addr);
     if (status == EFI_SUCCESS) {
@@ -111,9 +112,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     }
 
     /* 4. The Beef Check */
-    uint32 signature = *(volatile uint32*)0x1000000;
+    uint32 signature = *(volatile uint32*)CONFIG_KERNEL_BASE;
     if (signature != 0xDEADBEEF) {
-        SystemTable->ConOut->OutputString(SystemTable->ConOut, L"WHERES_THE_BEEF! Checked: 0x1000000 | Found: ");
+        SystemTable->ConOut->OutputString(SystemTable->ConOut, L"WHERES_THE_BEEF! Checked: ");
+        print_hex(SystemTable, CONFIG_KERNEL_BASE);
+        SystemTable->ConOut->OutputString(SystemTable->ConOut, L" | Found: ");
         print_hex(SystemTable, signature);
         SystemTable->ConOut->OutputString(SystemTable->ConOut, L" | Expected: 0xDEADBEEF\r\n");
         while(1) { __asm__ volatile("hlt"); }
@@ -129,7 +132,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         if (SystemTable->BootServices->GetMemoryMap(&map_size, map_buffer, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
             if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
                 /* Handover (Jump skipping the signature) */
-                void (*kernel_start)(boot_params_t*) = (void (*)(boot_params_t*))0x1000004;
+                void (*kernel_start)(boot_params_t*) = (void (*)(boot_params_t*))(CONFIG_KERNEL_BASE + 4);
                 kernel_start(&params);
             }
         }
