@@ -26,8 +26,8 @@ EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
 
 # Flags
 CFLAGS_COMMON = -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -O$(CONFIG_OPTIMIZATION)
-CFLAGS_EFI = $(CFLAGS_COMMON) -fpic -fshort-wchar -DEFI_FUNCTION_WRAPPER
-CFLAGS_KERNEL = $(CFLAGS_COMMON) -I$(LIBS_DIR) -I$(LIBS_DIR)/core -I$(KERNEL_DIR) -ffreestanding
+CFLAGS_EFI = $(CFLAGS_COMMON) -fpic -fshort-wchar -DEFI_FUNCTION_WRAPPER -I/usr/include/efi -I/usr/include/efi/x86_64 -I/usr/include/efi/protocol
+CFLAGS_KERNEL = $(CFLAGS_COMMON) -I$(LIBS_DIR) -I$(LIBS_DIR)/core -I$(KERNEL_DIR) -ffreestanding -mcmodel=large -fno-stack-protector -fno-pic -fno-pie -fno-plt
 
 LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
 LDFLAGS_KERNEL = -nostdlib -T $(BOOT_DIR)/linker.ld --oformat binary --defsym=KERNEL_BASE=$(CONFIG_KERNEL_BASE)
@@ -40,7 +40,8 @@ LOADER_SRCS = $(LOADER_DIR)/entry.c
 LOADER_OBJS = $(LOADER_SRCS:.c=.o)
 
 # ORDER MATTERS: main.o must be first for raw binary entry
-KERNEL_OBJS = $(KERNEL_DIR)/main.o \
+KERNEL_OBJS = $(KERNEL_DIR)/entry.o \
+              $(KERNEL_DIR)/main.o \
               $(KERNEL_DIR)/gdt.o \
               $(LIBS_DIR)/kutils.o \
               $(LIBS_DIR)/console.o \
@@ -62,7 +63,7 @@ SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 HEADERS = $(shell find include kernel loader -name "*.h")
 
 # Default Target
-all: info prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/kernel.bin $(BOOT_DIR)/shell.bin
+all: info prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/os2.bin $(BOOT_DIR)/shell.bin
 
 info:
 	@echo "------------------------------------------------"
@@ -95,11 +96,14 @@ $(LOADER_DIR)/%.o: $(LOADER_DIR)/%.c $(HEADERS)
 	$(CC) $(CFLAGS_EFI) -c $< -o $@
 
 # Stage 2: Kernel (Raw Binary)
-$(BOOT_DIR)/kernel.bin: $(KERNEL_OBJS)
-	$(LD) $(LDFLAGS_KERNEL) $(KERNEL_OBJS) -o $(BOOT_DIR)/kernel.bin
+$(BOOT_DIR)/os2.bin: $(KERNEL_OBJS)
+	$(LD) $(LDFLAGS_KERNEL) $(KERNEL_OBJS) -o $(BOOT_DIR)/os2.bin
 
 $(KERNEL_DIR)/%.o: $(KERNEL_DIR)/%.c $(HEADERS)
 	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
+
+$(KERNEL_DIR)/%.o: $(KERNEL_DIR)/%.asm
+	nasm -f elf64 $< -o $@
 
 $(LIBS_DIR)/%.o: $(LIBS_DIR)/%.c $(HEADERS)
 	$(CC) $(CFLAGS_KERNEL) -c $< -o $@
@@ -122,14 +126,14 @@ disk: all
 	mmd -i disk.img ::/EFI
 	mmd -i disk.img ::/EFI/BOOT
 	mcopy -i disk.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-	mcopy -i disk.img $(BOOT_DIR)/kernel.bin ::/kernel.bin
+	mcopy -i disk.img $(BOOT_DIR)/os2.bin ::/os2.bin
 	mcopy -i disk.img $(BOOT_DIR)/shell.bin ::/shell.bin
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
 
 iso: disk
 	mkdir -p iso_root/EFI/BOOT
 	cp $(EFI_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
-	cp $(BOOT_DIR)/kernel.bin iso_root/
+	cp $(BOOT_DIR)/os2.bin iso_root/
 	cp $(BOOT_DIR)/shell.bin iso_root/
 	xorriso -as mkisofs -R -f -e disk.img -no-emul-boot -o boot.iso iso_root
 	rm -rf iso_root
@@ -148,7 +152,7 @@ update: clean all
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f loader.so $(BOOT_DIR)/kernel.bin $(BOOT_DIR)/shell.bin disk.img
+	@rm -f loader.so $(BOOT_DIR)/os2.bin $(BOOT_DIR)/shell.bin disk.img
 	@rm -rf $(BOOT_DIR)/EFI
 	@echo "Build artifacts removed."
 

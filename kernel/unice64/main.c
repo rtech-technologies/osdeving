@@ -39,12 +39,8 @@ volatile uint32 signature = 0xDEADBEEF;
 /*
  * The God-Machine Entry Point (Stage 2)
  */
-__attribute__((section(".text.kernel_start_func")))
-void kernel_start(boot_params_t* params) {
-    /* Setup Kernel Stack (Top of kernel reservation) */
-    uint64 stack_top = (uint64)CONFIG_KERNEL_BASE + (16 * 1024 * 1024);
-    __asm__ volatile ("mov %0, %%rsp" : : "r"(stack_top));
-
+__attribute__((used))
+void kernel_main(boot_params_t* params) {
     kboot_params = *params;
 
     gdt_init();
@@ -64,7 +60,7 @@ void kernel_start(boot_params_t* params) {
     }
 
     print("OSx2 God-Mode: Kernel Handover Successful.\n");
-    debug_memory_at_B0000();
+    debug_kernel_signature();
     trigger(EVENT_INIT);
 
     rsl_syscall_table_t syscalls = {

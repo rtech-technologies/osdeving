@@ -7,23 +7,30 @@ This document provides an exhaustive, low-level technical specification of the O
 ## 1. Boot & Handover Layer (`/loader`, `/boot`)
 
 ### `loader/entry.c` (UEFI Stage 1)
-- **Purpose**: Transitions from UEFI (Microsoft x64 ABI) to the freestanding Stage 2 kernel.
+- **Purpose**: The "Diplomat". Initializes hardware and hands over to the Stage 2 "Dictator" (`os2.bin`).
 - **In-Code Logic**:
+    - **Branding**: Displays "OS*2 Loader: Locating Opaque Sheep...".
     - **Protocols**: Calls `LocateProtocol` for `EFI_GRAPHICS_OUTPUT_PROTOCOL` to extract `FrameBufferBase`, `HorizontalResolution`, and `PixelsPerScanLine` into a `boot_params_t` struct.
-    - **Storage**: Uses `HandleProtocol` with `EFI_LOADED_IMAGE_PROTOCOL` to find the boot device handle, then `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL` to open the root volume.
-    - **Allocation**: Calls `AllocatePages` (Type 2: `EfiLoaderCode`) to reserve 16MB at `CONFIG_KERNEL_BASE` (default `0x1000000`) and `0x3000000` (Shell).
-    - **Memory Setup**: Manually loops to zero-fill the ramdisk area at `0x4000000` (16MB).
-    - **Handshake**: Reads `*(volatile uint32*)CONFIG_KERNEL_BASE`. If the value stored at that address is not `0xDEADBEEF`, it prints "WHERES_THE_BEEF!" via `OutputString` and enters a `hlt` loop.
+    - **Storage**: Uses `LibFileInfo` and `AllocatePages` with `AllocateAddress` at `CONFIG_KERNEL_BASE` (default `0x100000`) to load `os2.bin`.
+    - **Handshake**: Verifies the `0xDEADBEEF` signature at the kernel base. Prints "WHERES_THE_BEEF!" on mismatch.
     - **Exit**: Calls `ExitBootServices(ImageHandle, map_key)` to terminate UEFI environment control.
     - **Handover**: Executes a far jump by casting the entry address to a function pointer: `((void (*)(boot_params_t*))(CONFIG_KERNEL_BASE + 4))(params)`.
 
 ### `boot/linker.ld`
-- **Purpose**: Defines the physical layout of the Stage 2 kernel flat binary.
+- **Purpose**: Defines the physical layout of the raw binary `os2.bin`.
 - **In-Code Logic**:
-    - `. = KERNEL_BASE`: Sets origin (default `0x1000000`).
+    - `ENTRY(_start)`: Sets the entry symbol to the ASM stub.
+    - `. = KERNEL_BASE`: Sets origin (default `0x100000`).
     - `KEEP(*(.text.kernel_start))`: Forces the `0xDEADBEEF` signature to the absolute first 4 bytes.
-    - `KEEP(*(.text.kernel_start_func))`: Forces the entry code to the next 4 bytes.
-    - Resulting binary is a raw instruction stream linked for the 16MB offset.
+    - `*(.text)`: Places the ASM entry point immediately after.
+
+### `kernel/unice64/entry.asm`
+- **Purpose**: The machine's first freestanding instructions.
+- **In-Code Logic**:
+    - **CLI**: Clears interrupts to prevent UEFI legacy timer crashes.
+    - **GDT Sledgehammer**: Loads the custom `rsl_gdt_pointer` and performs a `retfq` to flush the CS register to `0x08`.
+    - **Stack**: Initializes a fresh 16KB stack in the `.bss` section.
+    - **Transition**: Calls `kernel_main` (the C entry point), passing the `boot_params_t*` pointer.
 
 ### `boot/efi_types.h`
 - **Purpose**: Minimal UEFI interface definition.
@@ -102,7 +109,7 @@ This document provides an exhaustive, low-level technical specification of the O
 - **In-Code Logic**:
     - **Execution**: Takes the `shell_base` (0x3000000) from `boot_params_t` and casts it to a function pointer: `void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*)`.
     - **Syscall Bridge**: Calls this entry point passing a pointer to the `rsl_syscall_table_t` populated in `main.c`.
-    - **Beef Diagnostic**: `debug_memory_at_B0000` (auditing 0x1000000) is called here to ensure no late-stage memory corruption before handover.
+    - **Beef Diagnostic**: `debug_kernel_signature` (auditing `CONFIG_KERNEL_BASE`) is called here to ensure no late-stage memory corruption before handover.
 
 ### `kernel/libs/core/event.c` & `event.h`
 - **Purpose**: Asynchronous-style event notification system.

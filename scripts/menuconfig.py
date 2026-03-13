@@ -5,7 +5,7 @@ import sys
 # OSx2 Configuration Options - Professional Suite
 OPTIONS = [
     {"id": "CONFIG_DEBUG_LOGS", "label": "Enable Debug Logging", "type": "bool", "default": True},
-    {"id": "CONFIG_KERNEL_BASE", "label": "Kernel Base Address (Hex)", "type": "hex", "default": 0x1000000},
+    {"id": "CONFIG_KERNEL_BASE", "label": "Kernel Base Address (Hex)", "type": "hex", "default": 0x100000},
     {"id": "CONFIG_HEAP_BASE", "label": "ARC Heap Base Address (Hex)", "type": "hex", "default": 0x2000000},
     {"id": "CONFIG_HEAP_SIZE_MB", "label": "Global Heap Size (MB)", "type": "int", "default": 8},
     {"id": "CONFIG_SCROLL_SPEED", "label": "Console Scroll Speed (Pixels)", "type": "int", "default": 10},
