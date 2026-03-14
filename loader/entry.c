@@ -70,37 +70,51 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     EFI_FILE_PROTOCOL *root;
 
     status = SystemTable->BootServices->HandleProtocol(ImageHandle, &li_g, (void**)&li);
+    if (status != EFI_SUCCESS) {
+        Print(L"FATAL: LoadedImage Protocol Failed! %r\n", status);
+        while(1);
+    }
+
+    status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
+    if (status != EFI_SUCCESS) {
+        Print(L"FATAL: FileSystem Protocol Failed! %r\n", status);
+        while(1);
+    }
+
+    status = fs->OpenVolume(fs, &root);
+    if (status != EFI_SUCCESS) {
+        Print(L"FATAL: Could not open root volume! %r\n", status);
+        while(1);
+    }
+
+    /* Load Kernel at configured base */
+    status = load_file(SystemTable, root, L"os2.bin", CONFIG_KERNEL_BASE, (void*)0);
+    if (status != EFI_SUCCESS) {
+        Print(L"FATAL: Error loading os2.bin: %r\n", status);
+        while(1);
+    }
+
+    /* Load Shell at 48MB */
+    status = load_file(SystemTable, root, L"shell.bin", 0x3000000, &params.shell_size);
     if (status == EFI_SUCCESS) {
-        status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
-        if (status == EFI_SUCCESS) {
-            status = fs->OpenVolume(fs, &root);
-            if (status == EFI_SUCCESS) {
-                /* Load Kernel at configured base */
-                status = load_file(SystemTable, root, L"os2.bin", CONFIG_KERNEL_BASE, (void*)0);
-                if (status != EFI_SUCCESS) {
-                    Print(L"Error: Could not find os2.bin in the root directory!\n");
-                    while(1);
-                }
+        params.shell_base = (void*)0x3000000;
+    } else {
+        Print(L"Warning: shell.bin not found. %r\n", status);
+    }
 
-                /* Load Shell at 48MB */
-                status = load_file(SystemTable, root, L"shell.bin", 0x3000000, &params.shell_size);
-                if (status == EFI_SUCCESS) {
-                    params.shell_base = (void*)0x3000000;
-                }
-
-                /* Allocate System Disk (Ramdisk) at 64MB */
-                params.ramdisk_size = 16 * 1024 * 1024;
-                EFI_PHYSICAL_ADDRESS disk_addr = 0x4000000;
-                UINTN disk_pages = (params.ramdisk_size + 4095) / 4096;
-                status = SystemTable->BootServices->AllocatePages(2, 2, disk_pages, &disk_addr);
-                if (status == EFI_SUCCESS) {
-                    params.ramdisk_base = (void*)disk_addr;
-                    /* Zero the disk */
-                    UINT8* p = (UINT8*)params.ramdisk_base;
-                    for (UINT64 i = 0; i < params.ramdisk_size; i++) p[i] = 0;
-                }
-            }
-        }
+    /* Allocate System Disk (Ramdisk) at 64MB */
+    params.ramdisk_size = 16 * 1024 * 1024;
+    EFI_PHYSICAL_ADDRESS disk_addr = 0x4000000;
+    UINTN disk_pages = (params.ramdisk_size + 4095) / 4096;
+    status = SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, disk_pages, &disk_addr);
+    if (status == EFI_SUCCESS) {
+        params.ramdisk_base = (void*)disk_addr;
+        /* Zero the disk */
+        UINT8* p = (UINT8*)params.ramdisk_base;
+        for (UINT64 i = 0; i < params.ramdisk_size; i++) p[i] = 0;
+    } else {
+        Print(L"FATAL: Ramdisk allocation failed! %r\n", status);
+        while(1);
     }
 
     /* 3. Allocate Heap */

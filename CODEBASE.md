@@ -11,6 +11,7 @@ This document provides an exhaustive, low-level technical specification of the O
 - **In-Code Logic**:
     - **Branding**: Displays "OS*2 Loader: Locating Opaque Sheep...".
     - **Protocols**: Calls `LocateProtocol` for `EFI_GRAPHICS_OUTPUT_PROTOCOL` to extract `FrameBufferBase`, `HorizontalResolution`, and `PixelsPerScanLine` into a `boot_params_t` struct.
+    - **Robust Error Handling**: Implements explicit "Sledgehammer" checks for every UEFI protocol handle and pointer. If `HandleProtocol`, `OpenVolume`, or `Open` fail, it prints a fatal error and halts to prevent NULL pointer dereferences (#PF).
     - **Storage**: Uses `LibFileInfo` and `AllocatePages` with `AllocateAddress` at `CONFIG_KERNEL_BASE` (default `0x100000`) to load `os2.bin`.
     - **Handshake**: Verifies the `0xDEADBEEF` signature at the kernel base. Prints "WHERES_THE_BEEF!" on mismatch.
     - **Exit**: Calls `ExitBootServices(ImageHandle, map_key)` to terminate UEFI environment control.
