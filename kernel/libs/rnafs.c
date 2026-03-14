@@ -104,8 +104,12 @@ INTN rnafs_write(const char* path, const void* buffer, uint64 size) {
     /* Check if file exists */
     for (int i = 0; i < RNAFS_MAX_FILES; i++) {
         if (entries[i].name[0] != 0 && strcmp(entries[i].name, path) == 0) {
-            /* For v0 simplicity, we re-allocate even for existing files to avoid complexity */
-            /* In a real FS we'd check if old space fits. Here we just clear old bits if we were fancy. */
+            /* Clear old bits in bitmap */
+            uint32 old_start = entries[i].start_block;
+            uint32 old_blocks = (uint32)((entries[i].size + 511) / 512);
+            for (uint32 b = old_start; b < old_start + old_blocks; b++) {
+                bitmap[b / 8] &= ~(1 << (b % 8));
+            }
             entry_idx = i;
             break;
         }

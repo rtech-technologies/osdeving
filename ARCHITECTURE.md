@@ -44,7 +44,12 @@
 - The system must be buildable from pure source using the provided `Makefile`.
 - Use `make menuconfig` to configure the kernel features and heap settings.
 
-## 7. Development Tools
+## 7. Forensic Panic System
+- In the event of a fatal loader or kernel error, the system enters an "Autopsy" state.
+- CPU registers (RAX-R15) are captured and displayed alongside error messages and status codes.
+- Diagnostic data is mirrored to the serial COM1 port (0x3f8) for headless monitoring and logging.
+
+## 8. Development Tools
 - `tools/fontgen.html`: A pro-grade web studio to draw fonts and preview colors.
 - `scripts/menuconfig.py`: Terminal-based configuration utility (LFS-style).
 - `scripts/rnafs_tool.py`: Host-side tool to manage RNAFS disk images and inject files.

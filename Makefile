@@ -36,8 +36,7 @@ LDFLAGS_SHELL = -nostdlib -T programs/linker.ld --oformat binary
 LIBS_EFI = -lefi -lgnuefi
 
 # Source Files
-LOADER_SRCS = $(LOADER_DIR)/entry.c
-LOADER_OBJS = $(LOADER_SRCS:.c=.o)
+LOADER_OBJS = $(LOADER_DIR)/entry.o $(LOADER_DIR)/panic.o
 
 # ORDER MATTERS: main.o must be first for raw binary entry
 KERNEL_OBJS = $(KERNEL_DIR)/entry.o \
@@ -94,6 +93,9 @@ loader.so: $(LOADER_OBJS)
 
 $(LOADER_DIR)/%.o: $(LOADER_DIR)/%.c $(HEADERS)
 	$(CC) $(CFLAGS_EFI) -c $< -o $@
+
+$(LOADER_DIR)/%.o: $(LOADER_DIR)/%.asm
+	nasm -f elf64 $< -o $@
 
 # Stage 2: Kernel (Raw Binary)
 $(BOOT_DIR)/os2.bin: $(KERNEL_OBJS)

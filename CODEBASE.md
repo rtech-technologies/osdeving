@@ -11,11 +11,17 @@ This document provides an exhaustive, low-level technical specification of the O
 - **In-Code Logic**:
     - **Branding**: Displays "OS*2 Loader: Locating Opaque Sheep...".
     - **Protocols**: Calls `LocateProtocol` for `EFI_GRAPHICS_OUTPUT_PROTOCOL` to extract `FrameBufferBase`, `HorizontalResolution`, and `PixelsPerScanLine` into a `boot_params_t` struct.
-    - **Robust Error Handling**: Implements explicit "Sledgehammer" checks for every UEFI protocol handle and pointer. If `HandleProtocol`, `OpenVolume`, or `Open` fail, it prints a fatal error and halts to prevent NULL pointer dereferences (#PF).
+    - **Forensic Panic System**: Implements `LOADER_PANIC(msg, status)` which calls an assembly wrapper to capture CPU registers (RAX-R15) into a `register_state_t` struct.
+    - **Autopsy Display**: The `loader_panic_handler` outputs the message, status code, and register dump both to the UEFI screen and the serial COM1 (Port 0x3f8) for post-mortem analysis.
+    - **Robust Error Handling**: Implements explicit "Sledgehammer" checks for every UEFI protocol handle and pointer.
     - **Storage**: Uses `LibFileInfo` and `AllocatePages` with `AllocateAddress` at `CONFIG_KERNEL_BASE` (default `0x100000`) to load `os2.bin`.
-    - **Handshake**: Verifies the `0xDEADBEEF` signature at the kernel base. Prints "WHERES_THE_BEEF!" on mismatch.
+    - **Handshake**: Verifies the `0xDEADBEEF` signature at the kernel base.
     - **Exit**: Calls `ExitBootServices(ImageHandle, map_key)` to terminate UEFI environment control.
     - **Handover**: Executes a far jump by casting the entry address to a function pointer: `((void (*)(boot_params_t*))(CONFIG_KERNEL_BASE + 4))(params)`.
+
+### `loader/panic.asm`
+- **Purpose**: Low-level register state capture.
+- **In-Code Logic**: Saves all general-purpose registers to the stack, passes the stack pointer as a struct pointer to the C panic handler.
 
 ### `boot/linker.ld`
 - **Purpose**: Defines the physical layout of the raw binary `os2.bin`.

@@ -18,10 +18,63 @@ typedef struct {
     void*   ImageHandle;
 } loader_params_t;
 
-static EFI_GUID li_g = {0x5B1B31A1, 0x9562, 0x11D2, {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
-static EFI_GUID fs_g = {0x964E5B22, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
-static EFI_GUID gop_g = {0x70482061, 0x0512, 0x476A, {0xBC, 0xC3, 0x04, 0x54, 0x8F, 0x9E, 0x22, 0x07}};
-static EFI_GUID info_g = {0x0964E5B2, 0x6459, 0x11D2, {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
+typedef struct {
+    UINT64 rax, rbx, rcx, rdx, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15;
+} register_state_t;
+
+extern void capture_registers(CHAR16* message, EFI_STATUS status);
+
+static EFI_GUID li_g = LOADED_IMAGE_PROTOCOL;
+static EFI_GUID fs_g = SIMPLE_FILE_SYSTEM_PROTOCOL;
+static EFI_GUID gop_g = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+
+static void outb(unsigned short port, unsigned char val) {
+    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static unsigned char inb(unsigned short port) {
+    unsigned char ret;
+    __asm__ volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static void serial_putc(char c) {
+    while ((inb(0x3f8 + 5) & 0x20) == 0);
+    outb(0x3f8, c);
+}
+
+static void serial_print(const char* s) {
+    while (*s) serial_putc(*s++);
+}
+
+static void serial_print16(CHAR16* s) {
+    while (*s) serial_putc((char)*s++);
+}
+
+void loader_panic_handler(CHAR16* message, EFI_STATUS status, register_state_t* regs) {
+    serial_print("\n\r!!! LOADER PANIC !!!\n\r");
+    serial_print16(message);
+    serial_print("\n\r");
+
+    Print(L"\n\r!!! LOADER PANIC !!!\n\r");
+    Print(L"Message: %s\n\r", message);
+    Print(L"Status:  %r (0x%lx)\n\r", status, status);
+    Print(L"------------------------------------------------\n\r");
+    Print(L"RAX: %016lx RBX: %016lx\n\r", regs->rax, regs->rbx);
+    Print(L"RCX: %016lx RDX: %016lx\n\r", regs->rcx, regs->rdx);
+    Print(L"RBP: %016lx RSI: %016lx\n\r", regs->rbp, regs->rsi);
+    Print(L"RDI: %016lx R8:  %016lx\n\r", regs->rdi, regs->r8);
+    Print(L"R9:  %016lx R10: %016lx\n\r", regs->r9, regs->r10);
+    Print(L"R11: %016lx R12: %016lx\n\r", regs->r11, regs->r12);
+    Print(L"R13: %016lx R14: %016lx\n\r", regs->r13, regs->r14);
+    Print(L"R15: %016lx\n\r", regs->r15);
+    Print(L"------------------------------------------------\n\r");
+    Print(L"System Halted.\n\r");
+
+    while(1) { __asm__ volatile("hlt"); }
+}
+
+#define LOADER_PANIC(msg, stat) capture_registers(msg, stat)
 
 static EFI_STATUS load_file(EFI_SYSTEM_TABLE *ST, EFI_FILE_PROTOCOL *root, CHAR16 *name, EFI_PHYSICAL_ADDRESS addr, UINT64 *out_size) {
     EFI_FILE_PROTOCOL *file;
@@ -70,29 +123,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     EFI_FILE_PROTOCOL *root;
 
     status = SystemTable->BootServices->HandleProtocol(ImageHandle, &li_g, (void**)&li);
-    if (status != EFI_SUCCESS) {
-        Print(L"FATAL: LoadedImage Protocol Failed! %r\n", status);
-        while(1);
-    }
+    if (status != EFI_SUCCESS) LOADER_PANIC(L"LoadedImage Protocol Failed", status);
 
     status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
-    if (status != EFI_SUCCESS) {
-        Print(L"FATAL: FileSystem Protocol Failed! %r\n", status);
-        while(1);
-    }
+    if (status != EFI_SUCCESS) LOADER_PANIC(L"FileSystem Protocol Failed", status);
 
     status = fs->OpenVolume(fs, &root);
-    if (status != EFI_SUCCESS) {
-        Print(L"FATAL: Could not open root volume! %r\n", status);
-        while(1);
-    }
+    if (status != EFI_SUCCESS) LOADER_PANIC(L"Could not open root volume", status);
 
     /* Load Kernel at configured base */
     status = load_file(SystemTable, root, L"os2.bin", CONFIG_KERNEL_BASE, (void*)0);
-    if (status != EFI_SUCCESS) {
-        Print(L"FATAL: Error loading os2.bin: %r\n", status);
-        while(1);
-    }
+    if (status != EFI_SUCCESS) LOADER_PANIC(L"Error loading os2.bin", status);
 
     /* Load Shell at 48MB */
     status = load_file(SystemTable, root, L"shell.bin", 0x3000000, &params.shell_size);
@@ -113,8 +154,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         UINT8* p = (UINT8*)params.ramdisk_base;
         for (UINT64 i = 0; i < params.ramdisk_size; i++) p[i] = 0;
     } else {
-        Print(L"FATAL: Ramdisk allocation failed! %r\n", status);
-        while(1);
+        LOADER_PANIC(L"Ramdisk allocation failed", status);
     }
 
     /* 3. Allocate Heap */
@@ -126,15 +166,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         params.heap_base = (void*)heap_addr;
         params.heap_size = (UINT64)heap_size;
     } else {
-        Print(L"Error allocating heap: %r\n", status);
-        while(1);
+        LOADER_PANIC(L"Error allocating heap", status);
     }
 
     /* 4. The Beef Check */
     UINT32 signature = *(volatile UINT32*)CONFIG_KERNEL_BASE;
     if (signature != 0xDEADBEEF) {
-        Print(L"WHERES_THE_BEEF! Checked: 0x%lx | Found: 0x%x | Expected: 0xDEADBEEF\n", (UINT64)CONFIG_KERNEL_BASE, signature);
-        while(1) { __asm__ volatile("hlt"); }
+        LOADER_PANIC(L"WHERES_THE_BEEF! Signature Mismatch", EFI_COMPROMISED_DATA);
     }
 
     Print(L"Sheep Loaded. Breaking the walls...\n");
