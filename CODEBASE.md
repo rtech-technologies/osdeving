@@ -4,169 +4,76 @@ This document provides an exhaustive, low-level technical specification of the O
 
 ---
 
-## 1. Boot & Handover Layer (`/loader`, `/boot`)
+## 1. Boot & Entry Layer (`/kernel/unice64`)
 
-### `loader/entry.c` (UEFI Stage 1)
-- **Purpose**: The "Diplomat". Initializes hardware and hands over to the Stage 2 "Dictator" (`os2.bin`).
+### `kernel/unice64/efi_entry.c` (Native UEFI Entry)
+- **Purpose**: The "Native Diplomat". Serves as the PE32+ entry point for the firmware.
 - **In-Code Logic**:
-    - **Branding**: Displays "OS*2 Loader: Locating Opaque Sheep...".
-    - **Protocols**: Calls `LocateProtocol` for `EFI_GRAPHICS_OUTPUT_PROTOCOL` to extract `FrameBufferBase`, `HorizontalResolution`, and `PixelsPerScanLine` into a `boot_params_t` struct.
-    - **Forensic Panic System**: Implements `LOADER_PANIC(msg, status)` which calls an assembly wrapper to capture CPU registers (RAX-R15) into a `register_state_t` struct.
-    - **Autopsy Display**: The `loader_panic_handler` outputs the message, status code, and register dump both to the UEFI screen and the serial COM1 (Port 0x3f8) for post-mortem analysis.
-    - **Robust Error Handling**: Implements explicit "Sledgehammer" checks for every UEFI protocol handle and pointer.
-    - **Storage**: Uses `LibFileInfo` and `AllocatePages` with `AllocateAddress` at `CONFIG_KERNEL_BASE` (default `0x100000`) to load `os2.bin`.
-    - **Handshake**: Verifies the `0xDEADBEEF` signature at the kernel base.
-    - **Exit**: Calls `ExitBootServices(ImageHandle, map_key)` to terminate UEFI environment control.
-    - **Handover**: Executes a far jump by casting the entry address to a function pointer: `((void (*)(boot_params_t*))(CONFIG_KERNEL_BASE + 4))(params)`.
-
-### `loader/panic.asm`
-- **Purpose**: Low-level register state capture.
-- **In-Code Logic**: Saves all general-purpose registers to the stack, passes the stack pointer as a struct pointer to the C panic handler.
-
-### `boot/linker.ld`
-- **Purpose**: Defines the physical layout of the raw binary `os2.bin`.
-- **In-Code Logic**:
-    - `ENTRY(_start)`: Sets the entry symbol to the ASM stub.
-    - `. = KERNEL_BASE`: Sets origin (default `0x100000`).
-    - `KEEP(*(.text.kernel_start))`: Forces the `0xDEADBEEF` signature to the absolute first 4 bytes.
-    - `*(.text)`: Places the ASM entry point immediately after.
-
-### `kernel/unice64/entry.asm`
-- **Purpose**: The machine's first freestanding instructions.
-- **In-Code Logic**:
-    - **CLI**: Clears interrupts to prevent UEFI legacy timer crashes.
-    - **GDT Sledgehammer**: Loads the custom `rsl_gdt_pointer` and performs a `retfq` to flush the CS register to `0x08`.
-    - **Stack**: Initializes a fresh 16KB stack in the `.bss` section.
-    - **Transition**: Calls `kernel_main` (the C entry point), passing the `boot_params_t*` pointer.
-
-### `boot/efi_types.h`
-- **Purpose**: Minimal UEFI interface definition.
-- **In-Code Logic**: Defines `EFI_SYSTEM_TABLE` and `EFI_BOOT_SERVICES` structs with exact UEFI-spec padding. Uses `__attribute__((ms_abi))` for all function pointers to ensure compatibility with firmware calling conventions.
+    - **Initialization**: Calls `InitializeLib` (gnu-efi) to setup the UEFI environment.
+    - **Protocols**:
+        - Locates `EFI_GRAPHICS_OUTPUT_PROTOCOL` (GOP) to extract the linear framebuffer address, resolution, and scanline width into a `boot_params_t` struct.
+        - Handles `LOADED_IMAGE_PROTOCOL` and `SIMPLE_FILE_SYSTEM_PROTOCOL` to open the boot volume.
+    - **File Loading**: Loads `shell.bin` from the ESP into a 48MB fixed memory location (`0x3000000`).
+    - **Environment Prep**: Allocates memory for the ARC heap and the system ramdisk using `AllocatePages`.
+    - **The Transition**: Calls `ExitBootServices` to terminate UEFI's control over the hardware, then immediately calls `kernel_main` (passing the populated `boot_params_t`).
 
 ---
 
 ## 2. Kernel Core Layer (`/kernel/unice64`)
 
 ### `kernel/unice64/main.c` (The Orchestrator)
-- **Purpose**: Kernel entry, service registry, and event loop.
+- **Purpose**: Kernel initialization, service registry, and event loop.
 - **In-Code Logic**:
-    - **Stack Reset**: Resets the stack pointer to the top of the kernel reservation area: `asm volatile ("mov %0, %%rsp" : : "r"(CONFIG_KERNEL_BASE + 16MB))`.
-    - **Service Registry**: `static service_init_t registered_services[16]` stores init pointers.
-    - **Handover**: Populates `rsl_syscall_table_t` with function pointers (e.g., `print`, `alloc`, `vdisk_read`) to be passed to user programs.
-    - **Event Loop**: Triggers `EVENT_INIT`, then enters `while(running) { trigger(EVENT_MAIN); }`.
+    - **GDT Reset**: Calls `gdt_init` to re-establish segment descriptors for 64-bit mode after exiting UEFI services.
+    - **Service Registry**: Iterates through `registered_services` (Console, Memory, Input, FS, etc.) and calls their init functions.
+    - **Syscall Bridge**: Populates `rsl_syscall_table_t` with function pointers to kernel services.
+    - **Execution**: Hands over control to the user-space shell by calling `loader_run_shell`.
+    - **Event Loop**: Enters a `while(running)` loop that triggers `EVENT_MAIN`, allowing for asynchronous background processing.
 
 ### `kernel/unice64/gdt.c`
 - **Purpose**: CPU segmentation for long mode.
-- **In-Code Logic**: Defines a static GDT with 3 entries: 0 (Null), 1 (Code: 0x9A access, 0x20 flags), and 2 (Data: 0x92 access). Loads via `lgdt` instruction.
-
-### `kernel/unice64/io.h`
-- **Purpose**: Hardware port primitives.
-- **In-Code Logic**: Wraps `inb` and `outb` instructions using inline assembly with "a" (AL) and "Nd" (DX/Imm) constraints.
+- **In-Code Logic**: Defines a static GDT with Null, Code, and Data descriptors. Loads the GDT using the `lgdt` instruction to ensure the kernel runs in a controlled environment.
 
 ---
 
 ## 3. Kernel Services Layer (`/kernel/libs`)
 
-### `kernel/libs/connect.c` & `connect.h`
-- **Purpose**: Physical hardware inventory.
-- **In-Code Logic**: Maintains `registry[8]` of `physical_config_t`. `connect_init` creates `/CONNECT/RAM0/` using the base/size provided by the loader. Includes overlap checks for the 1MB low-memory region.
+### `kernel/libs/connect.c`
+- **Purpose**: Physical hardware inventory. Maintains a registry of memory-mapped I/O and RAM regions.
 
-### `kernel/libs/vdisk.c` & `vdisk.h`
-- **Purpose**: Storage virtualization layer.
-- **In-Code Logic**:
-    - **LBA Mapping**: `phys_lba = vd->start_lba + lba`. Boundary checks against `vd->end_lba`.
-    - **Security**: `vdisk_mount_verify` reads LBA 0; if the first 4 bytes are not `0xDEADBEEF`, it returns 0 (Access Denied).
+### `kernel/libs/vdisk.c`
+- **Purpose**: Storage virtualization layer. Translates virtual LBA requests to physical offsets on the ramdisk or other hardware.
 
-### `kernel/libs/memory.c` & `memory.h` (ARC System)
+### `kernel/libs/memory.c` (ARC System)
 - **Purpose**: Reference-counted memory management.
-- **In-Code Logic**:
-    - **Header**: Every block starts with `arc_header_t` (uint32 ref_count, uint32 size, uint64 magic).
-    - **Allocation**: Bump-pointer `heap_ptr` increments by `(size + 16 + 15) & ~15` to ensure 16-byte alignment.
-    - **Safety**: `release()` zeros the magic `0x4152434D454D3031` when the refcount hits zero.
+- **In-Code Logic**: Implements a 'Free List' allocator on top of the UEFI-allocated heap. `alloc` returns ref-counted pointers; `release` decrements the count and returns the block to the free list if it hits zero.
 
-### `kernel/libs/diskman.c` & `diskman.h`
-- **Purpose**: GPT compliance and VDISK bridging.
-- **In-Code Logic**:
-    - **GPT Engine**: Reads LBA 1. If "EFI PART" matches, it creates VDISKs (e.g., "PART0") for each valid entry.
-    - **CRC Engine**: Uses `crc32()` to recompute header (at offset 16) and entry array checksums after writes.
+### `kernel/libs/diskman.c`
+- **Purpose**: Partition management. Parses GPT (GUID Partition Table) headers and manages VDISK partition mapping.
 
-### `kernel/libs/rnafs.c` & `rnafs.h`
+### `kernel/libs/rnafs.c` (Proprietary FS)
 - **Purpose**: Contiguous filesystem on VDISKs.
-- **In-Code Logic**:
-    - **Bitmap**: Block 1 acts as a 4096-bit allocation map.
-    - **Greedy Alloc**: `rnafs_write` scans bits in Block 1 for a contiguous run of 0s equal to the file's sector count.
-    - **Directory**: Uses `__attribute__((packed))` on 128-byte `rnafs_entry_t` structs.
+- **In-Code Logic**: Uses a bitmap for block management. `rnafs_write` performs contiguous allocation and updates the directory entries. Fixed a critical bug where overwrites leaked blocks; it now deallocates old blocks before re-writing.
 
-### `kernel/libs/console.c`, `font_data.c`, `font.h`
-- **Purpose**: GOP-based graphics text rendering.
-- **In-Code Logic**:
-    - **Drawing**: `draw_char` bit-tests `font8x8_basic[c][row]`. If set, it writes the 32-bit color to `framebuffer[(y+row)*scanline + (x+col)]`.
-    - **Scrolling**: `memcpy` shifts the framebuffer up by 10 rows.
-
-### `kernel/libs/input.c` & `input.h`
-- **Purpose**: Freestanding PS/2 input.
-- **In-Code Logic**: Polls Port `0x64` (Status). If bit 0 is set, it reads the scancode from Port `0x60` and translates it using a Set 1 lookup table.
+### `kernel/libs/console.c`
+- **Purpose**: Graphics-mode text rendering. Draws 8x8 font characters directly to the GOP framebuffer.
 
 ### `kernel/libs/kutils.c` & `kutils.h`
-- **Purpose**: Internal utility library.
-- **In-Code Logic**: Bitwise CRC32 (polynomial `0xEDB88320`), pointer-offset `memcpy`/`memset`, and base-10/16 `itoa`.
-
-### `kernel/libs/loader.c` & `loader.h`
-- **Purpose**: Stage 2 Handover and execution of the user shell.
-- **In-Code Logic**:
-    - **Execution**: Takes the `shell_base` (0x3000000) from `boot_params_t` and casts it to a function pointer: `void (*shell_entry)(boot_params_t*, rsl_syscall_table_t*)`.
-    - **Syscall Bridge**: Calls this entry point passing a pointer to the `rsl_syscall_table_t` populated in `main.c`.
-    - **Beef Diagnostic**: `debug_kernel_signature` (auditing `CONFIG_KERNEL_BASE`) is called here to ensure no late-stage memory corruption before handover.
-
-### `kernel/libs/core/event.c` & `event.h`
-- **Purpose**: Asynchronous-style event notification system.
-- **In-Code Logic**:
-    - **Storage**: `static event_handler_t handlers[32]` array of function pointers.
-    - **Trigger**: `trigger(event_t event)` iterates from `0` to `handler_count - 1` and executes `handlers[i](event)`. This allows services to react to system lifecycle events (INIT, MAIN, CLEANUP) without tight coupling.
+- **Purpose**: Internal utility library. Uses `k_` prefixes (e.g., `k_memcpy`, `k_memset`) to avoid naming collisions with gnu-efi/UEFI symbols.
 
 ---
 
-## 4. User Programs Layer (`/programs`, `/include`)
+## 4. User Programs Layer (`/programs`)
 
-### `programs/libsystem.c` & `include/rsl.h`
-- **Purpose**: RTECH Standard Library implementation.
-- **In-Code Logic**: Caches the kernel's `rsl_syscall_table_t`. High-level functions (e.g., `readline`) check if the kernel pointer is valid before calling.
+### `programs/libsystem.c`
+- **Purpose**: RTECH Standard Library (RSL) implementation for user-space. Caches the syscall table passed by the kernel.
 
 ### `programs/shell.c`
-- **Purpose**: Interactive user shell.
-- **In-Code Logic**: `while(1)` loop calling `readline()`. Uses `strncmp` to route commands to RSL storage functions.
-
-### `programs/linker.ld`
-- **Purpose**: User-space linking.
-- **In-Code Logic**: Sets origin to `0x3000000` to match Stage 1 handover.
+- **Purpose**: Native OSx2 Shell. Provides an interactive interface for file management and system commands.
 
 ---
 
-## 5. System Definitions (`/include`)
+## 5. Build System (`Makefile`)
 
-### `include/types.h`
-- **Purpose**: Portable freestanding types.
-- **In-Code Logic**: Defines `uint8`, `uint16`, `uint32`, `uint64`, `INTN`, and `size_t`.
-
-### `include/config.h`
-- **Purpose**: Build settings.
-- **In-Code Logic**: Auto-generated by `menuconfig.py`.
-
----
-
-## 6. Development Tools (`/scripts`, `/tools`, `Makefile`)
-
-### `scripts/menuconfig.py`
-- **Purpose**: Kernel configuration UI.
-- **In-Code Logic**: Uses `curses` to manage `.config`. Automatically generates `include/config.h`.
-
-### `scripts/rnafs_tool.py`
-- **Purpose**: Disk image builder.
-- **In-Code Logic**: Implements RNAFS bitmap and directory logic in Python to inject files.
-
-### `Makefile`
-- **Purpose**: System architect.
-- **In-Code Logic**:
-    - EFI: `-fpic -fshort-wchar -shared -Bsymbolic`.
-    - Kernel: `-ffreestanding -nostdlib --oformat binary --defsym=KERNEL_BASE=...`.
-    - Image: `mtools` and `xorriso` for ISO generation.
+- **Architecture**: Links all kernel components into a single `kernel.so` shared object, which is then converted to a `BOOTX64.EFI` application using `objcopy`.
+- **Emulation**: Uses `qemu-system-x86_64` with the Q35 chipset and OVMF firmware to provide a modern UEFI boot environment.

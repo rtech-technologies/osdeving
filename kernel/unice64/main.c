@@ -31,18 +31,12 @@ void exit_kernel() {
 }
 
 /*
- * Mandatory Signature Handshake (Stage 2)
+ * The God-Machine Entry Point
  */
-__attribute__((section(".text.kernel_start"), used))
-volatile uint32 signature = 0xDEADBEEF;
-
-/*
- * The God-Machine Entry Point (Stage 2)
- */
-__attribute__((used))
 void kernel_main(boot_params_t* params) {
     kboot_params = *params;
 
+    /* GDT and Interrupts are usually reset after ExitBootServices for full control */
     gdt_init();
 
     register_service(console_init);

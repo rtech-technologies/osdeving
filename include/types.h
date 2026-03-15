@@ -13,18 +13,22 @@ typedef int               int32;
 typedef short             int16;
 typedef signed char       int8;
 
-typedef uint64            size_t;
-typedef uint64            uintptr_t;
+#ifndef __uintptr_t_defined
+typedef unsigned long      uintptr_t;
+#define __uintptr_t_defined
+#endif
 
-#if !defined(_EFI_H) && !defined(_EFI_BIND_H) && !defined(_EFIBIND_H_) && !defined(__EFI_TYPES_H__)
-typedef uint64            UINTN;
-typedef int64             INTN;
+typedef unsigned long      size_t;
+
+#if !defined(_EFI_H) && !defined(_EFI_BIND_H) && !defined(_EFIBIND_H_) && !defined(__EFI_TYPES_H__) && !defined(_EFI_TYPES_H)
+typedef unsigned long     UINTN;
+typedef long              INTN;
 typedef uint16            CHAR16;
 typedef uint8             CHAR8;
 
 typedef void*             EFI_HANDLE;
 typedef UINTN             EFI_STATUS;
-typedef uint64            EFI_PHYSICAL_ADDRESS;
+typedef unsigned long     EFI_PHYSICAL_ADDRESS;
 #endif
 
 #ifndef NULL

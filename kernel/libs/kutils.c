@@ -9,13 +9,19 @@ void strcpy(char* dst, const char* src) {
     while ((*dst++ = *src++));
 }
 
-void memcpy(void* dst, const void* src, uint64 n) {
+uint64 k_strlen(const char* s) {
+    uint64 len = 0;
+    while (*s++) len++;
+    return len;
+}
+
+void k_memcpy(void* dst, const void* src, uint64 n) {
     uint8* d = (uint8*)dst;
     const uint8* s = (const uint8*)src;
     while (n--) *d++ = *s++;
 }
 
-void memset(void* s, int c, uint64 n) {
+void k_memset(void* s, int c, uint64 n) {
     uint8* p = (uint8*)s;
     while (n--) *p++ = (uint8)c;
 }
