@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSx2 Pro Font & Color Studio</title>
+    <style>
+        :root { --bg: #1a1a1a; --panel: #2a2a2a; --accent: #00ff88; --text: #e0e0e0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { background: #000; padding: 15px; border-bottom: 2px solid var(--accent); text-align: center; }
+        .main { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 300px; background: var(--panel); padding: 20px; border-right: 1px solid #444; overflow-y: auto; }
+        .canvas-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+
+        .grid { display: grid; grid-template-columns: repeat(8, 40px); grid-template-rows: repeat(8, 40px); gap: 2px; background: #444; border: 4px solid #444; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .cell { width: 40px; height: 40px; background: #222; cursor: crosshair; transition: background 0.1s; }
+        .cell:hover { background: #333; }
+        .cell.active { background: var(--accent); box-shadow: inset 0 0 10px rgba(0,255,136,0.5); }
+
+        .preview-card { background: #000; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center; border: 1px solid #444; }
+        .preview-text { font-size: 64px; line-height: 1; }
+
+        .control-group { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: var(--accent); font-size: 12px; text-transform: uppercase; }
+
+        select, input[type="text"], input[type="color"] { width: 100%; padding: 8px; background: #111; border: 1px solid #555; color: #fff; border-radius: 4px; box-sizing: border-box; }
+
+        button { width: 100%; padding: 12px; margin-top: 10px; background: #444; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.2s; }
+        button:hover { background: #555; transform: translateY(-1px); }
+        button.primary { background: var(--accent); color: #000; }
+        button.primary:hover { background: #00dd77; }
+
+        textarea { width: 100%; height: 120px; background: #000; color: #0f0; border: 1px solid #444; font-family: 'Consolas', monospace; font-size: 11px; margin-top: 10px; resize: none; }
+
+        .color-preview { display: flex; gap: 10px; margin-top: 10px; }
+        .color-swatch { flex: 1; height: 30px; border-radius: 4px; border: 1px solid #555; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 style="margin:0; font-size: 20px; letter-spacing: 2px;">OSx2 / RTECH <span style="color:var(--accent)">FONT STUDIO</span></h1>
+    </header>
+
+    <div class="main">
+        <div class="sidebar">
+            <div class="control-group">
+                <label>Character Selection</label>
+                <select id="charSelect" onchange="loadChar()"></select>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="clearGrid()">Clear</button>
+                    <button onclick="invertGrid()">Invert</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Theme & Colors</label>
+                <input type="color" id="fgColor" value="#00ff88" oninput="updatePreview()">
+                <div class="color-preview">
+                    <div id="swatch" class="color-swatch" style="background: #00ff88;"></div>
+                    <input type="text" id="hexVal" readonly value="0x00FF88">
+                </div>
+                <p style="font-size: 10px; color: #888; margin-top: 5px;">This hex code can be used in RSL set_color().</p>
+            </div>
+
+            <div class="control-group">
+                <label>Export Tools</label>
+                <button class="primary" onclick="exportBinary()">Download .FNT</button>
+                <button onclick="exportC()">Generate RSL Code</button>
+                <textarea id="output" readonly></textarea>
+            </div>
+        </div>
+
+        <div class="canvas-area">
+            <div class="grid" id="grid"></div>
+
+            <div class="preview-card">
+                <label>OS Console Preview</label>
+                <div id="preview" class="preview-text" style="color: #00ff88;">A</div>
+                <button onclick="saveCurrentChar()" style="margin-top:20px; width: auto; padding: 10px 40px;">Commit Character</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const grid = document.getElementById('grid');
+        const charSelect = document.getElementById('charSelect');
+        const preview = document.getElementById('preview');
+        const fgColor = document.getElementById('fgColor');
+        const swatch = document.getElementById('swatch');
+        const hexVal = document.getElementById('hexVal');
+        const output = document.getElementById('output');
+
+        let fontData = new Uint8Array(128 * 8);
+
+        // Init Grid
+        for (let i = 0; i < 64; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.index = i;
+            cell.onmousedown = (e) => { toggleCell(cell); };
+            cell.onmouseover = (e) => { if(e.buttons === 1) toggleCell(cell); };
+            grid.appendChild(cell);
+        }
+
+        // Init Char Select
+        for (let i = 32; i < 127; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${i} - ${String.fromCharCode(i)}`;
+            if(i === 65) opt.selected = true;
+            charSelect.appendChild(opt);
+        }
+
+        function toggleCell(cell) {
+            cell.classList.toggle('active');
+            updatePreview();
+        }
+
+        function clearGrid() {
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('active'));
+            updatePreview();
+        }
+
+        function invertGrid() {
+            document.querySelectorAll('.cell').forEach(c => c.classList.toggle('active'));
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const color = fgColor.value;
+            swatch.style.background = color;
+            preview.style.color = color;
+            hexVal.value = '0x' + color.substring(1).toUpperCase();
+
+            // Generate mini SVG preview for the "A" or current char
+            // For now just show standard font but in color
+            preview.textContent = String.fromCharCode(parseInt(charSelect.value));
+        }
+
+        function getGridData() {
+            let bytes = new Uint8Array(8);
+            const cells = document.querySelectorAll('.cell');
+            for (let row = 0; row < 8; row++) {
+                let byte = 0;
+                for (let col = 0; col < 8; col++) {
+                    if (cells[row * 8 + col].classList.contains('active')) {
+                        byte |= (1 << col);
+                    }
+                }
+                bytes[row] = byte;
+            }
+            return bytes;
+        }
+
+        function setGridData(bytes) {
+            const cells = document.querySelectorAll('.cell');
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (bytes[row] & (1 << col)) {
+                        cells[row * 8 + col].classList.add('active');
+                    } else {
+                        cells[row * 8 + col].classList.remove('active');
+                    }
+                }
+            }
+        }
+
+        function saveCurrentChar() {
+            const charCode = parseInt(charSelect.value);
+            const bytes = getGridData();
+            for (let i = 0; i < 8; i++) fontData[charCode * 8 + i] = bytes[i];
+            alert('Character ' + String.fromCharCode(charCode) + ' saved to local memory.');
+        }
+
+        function loadChar() {
+            const charCode = parseInt(charSelect.value);
+            const bytes = fontData.slice(charCode * 8, charCode * 8 + 8);
+            setGridData(bytes);
+            updatePreview();
+        }
+
+        function exportBinary() {
+            saveCurrentChar();
+            const blob = new Blob([fontData], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'custom.fnt';
+            a.click();
+        }
+
+        function exportC() {
+            saveCurrentChar();
+            let text = "// OSx2 RSL Font Data\n";
+            text += "const uint8 font_data[1024] = {\n";
+            for (let i = 0; i < 128; i++) {
+                text += "    ";
+                for (let j = 0; j < 8; j++) {
+                    text += '0x' + fontData[i * 8 + j].toString(16).padStart(2, '0').toUpperCase() + (i === 127 && j === 7 ? "" : ", ");
+                }
+                text += ` // ${String.fromCharCode(i) || '?'}\n`;
+            }
+            text += "};";
+            output.value = text;
+        }
+
+        updatePreview();
+        loadChar();
+    </script>
+</body>
+</html>
