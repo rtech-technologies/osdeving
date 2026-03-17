@@ -57,7 +57,7 @@ SHELL_OBJS = $(SHELL_SRCS:.c=.o)
 HEADERS = $(shell find include kernel -name "*.h")
 
 # Default Target
-all: info prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/shell.bin
+all: info prepare $(EFI_DIR)/BOOTX64.EFI $(BOOT_DIR)/os2.bin
 
 info:
 	@echo "------------------------------------------------"
@@ -93,8 +93,8 @@ $(LIBS_DIR)/core/%.o: $(LIBS_DIR)/core/%.c $(HEADERS)
 	$(CC) $(CFLAGS_EFI) -c $< -o $@
 
 # Programs (Still raw binary for simplicity in loading)
-$(BOOT_DIR)/shell.bin: $(SHELL_OBJS)
-	$(LD) $(LDFLAGS_SHELL) $(SHELL_OBJS) -o $(BOOT_DIR)/shell.bin
+$(BOOT_DIR)/os2.bin: $(SHELL_OBJS)
+	$(LD) $(LDFLAGS_SHELL) $(SHELL_OBJS) -o $(BOOT_DIR)/os2.bin
 
 programs/%.o: programs/%.c $(HEADERS)
 	$(CC) -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -ffreestanding -c $< -o $@
@@ -110,21 +110,30 @@ disk: all
 	mmd -i disk.img@@1M ::/EFI
 	mmd -i disk.img@@1M ::/EFI/BOOT
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-	mcopy -i disk.img@@1M $(BOOT_DIR)/shell.bin ::/shell.bin
+	mcopy -i disk.img@@1M $(BOOT_DIR)/os2.bin ::/os2.bin
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
 
-run: disk
-	qemu-system-x86_64 -machine q35 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=disk.img -m 256M -serial stdio -net none
+# Create a bootable UEFI ISO
+iso: all
+	@echo "Creating bootable UEFI ISO image..."
+	mkdir -p iso/EFI/BOOT
+	cp $(EFI_DIR)/BOOTX64.EFI iso/EFI/BOOT/BOOTX64.EFI
+	cp $(BOOT_DIR)/os2.bin iso/os2.bin
+	xorriso -as mkisofs -R -f -e /EFI/BOOT/BOOTX64.EFI -no-emul-boot -o boot.iso iso/
+	@echo "OSx2 Boot ISO Ready (boot.iso)."
+
+run: iso
+	qemu-system-x86_64 -machine q35 -bios /usr/share/ovmf/OVMF.fd -cdrom boot.iso -m 256M -serial stdio -net none
 
 setup:
 	sudo apt-get update
-	sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf mtools dosfstools
+	sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf mtools dosfstools xorriso parted
 
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so $(BOOT_DIR)/shell.bin disk.img
-	@rm -rf $(BOOT_DIR)/EFI
+	@rm -f kernel.so $(BOOT_DIR)/os2.bin disk.img boot.iso
+	@rm -rf $(BOOT_DIR)/EFI iso
 	@echo "Build artifacts removed."
 
-.PHONY: all clean disk prepare menuconfig info run
+.PHONY: all clean disk iso prepare menuconfig info run

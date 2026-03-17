@@ -73,14 +73,14 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         while(1);
     }
 
-    /* Load Shell at 48MB (or wherever specified) */
+    /* Load Kernel (Sheep) at 48MB (or wherever specified) */
     UINT64 shell_size = 0;
-    status = load_file(SystemTable, root, L"shell.bin", 0x3000000, &shell_size);
+    status = load_file(SystemTable, root, L"os2.bin", 0x3000000, &shell_size);
     params.shell_size = (uint64)shell_size;
     if (status == EFI_SUCCESS) {
         params.shell_base = (void*)0x3000000;
     } else {
-        Print(L"Warning: shell.bin not found on ESP. %r\n", status);
+        Print(L"Warning: os2.bin not found on ESP. %r\n", status);
     }
 
     /* 3. Prepare System Disk (Ramdisk) */
