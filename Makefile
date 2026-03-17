@@ -126,6 +126,8 @@ iso: all
 	mmd -i efiboot.img ::/EFI/BOOT
 	mcopy -i efiboot.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/os2.bin
+	mmd -i efiboot.img ::/OS2
+	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/OS2/os2.bin
 	cp efiboot.img iso/efiboot.img
 	xorriso -as mkisofs \
 		-R -f \

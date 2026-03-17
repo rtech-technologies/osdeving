@@ -9,24 +9,34 @@ static EFI_GUID li_g = LOADED_IMAGE_PROTOCOL;
 static EFI_GUID fs_g = SIMPLE_FILE_SYSTEM_PROTOCOL;
 static EFI_GUID gop_g = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 
-static EFI_STATUS load_file(EFI_SYSTEM_TABLE *ST, EFI_FILE_PROTOCOL *root, CHAR16 *name, EFI_PHYSICAL_ADDRESS addr, UINT64 *out_size) {
+static EFI_STATUS load_file(EFI_SYSTEM_TABLE *ST, EFI_FILE_PROTOCOL *root, CHAR16 *name, EFI_PHYSICAL_ADDRESS addr, EFI_ALLOCATE_TYPE type, EFI_MEMORY_TYPE mem_type, UINT64 *out_size, void **out_ptr) {
     EFI_FILE_PROTOCOL *file;
     EFI_STATUS status = root->Open(root, &file, name, EFI_FILE_MODE_READ, 0);
     if (status != EFI_SUCCESS) return status;
 
     EFI_FILE_INFO *info = LibFileInfo(file);
-    if (!info) return EFI_LOAD_ERROR;
+    if (!info) {
+        file->Close(file);
+        return EFI_LOAD_ERROR;
+    }
 
     UINT64 file_size = info->FileSize;
     UINTN pages = (file_size + 4095) / 4096;
     EFI_PHYSICAL_ADDRESS load_addr = addr;
 
-    status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, &load_addr);
-    if (status != EFI_SUCCESS) return status;
+    status = ST->BootServices->AllocatePages(type, mem_type, pages, &load_addr);
+    if (status != EFI_SUCCESS) {
+        FreePool(info);
+        file->Close(file);
+        return status;
+    }
 
     UINTN read_size = (UINTN)file_size;
     status = file->Read(file, &read_size, (void*)load_addr);
-    if (status == EFI_SUCCESS && out_size) *out_size = (UINT64)read_size;
+    if (status == EFI_SUCCESS) {
+        if (out_size) *out_size = (UINT64)read_size;
+        if (out_ptr) *out_ptr = (void*)load_addr;
+    }
 
     FreePool(info);
     file->Close(file);
@@ -74,20 +84,22 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     }
 
     /* Load Kernel (Sheep) at 48MB (or wherever specified) */
+    /* Using EfiLoaderCode for execution compatibility */
     UINT64 shell_size = 0;
-    status = load_file(SystemTable, root, L"os2.bin", 0x3000000, &shell_size);
-    params.shell_size = (uint64)shell_size;
+    void* shell_base = NULL;
+    status = load_file(SystemTable, root, L"os2.bin", 0x3000000, AllocateAddress, EfiLoaderCode, &shell_size, &shell_base);
     if (status == EFI_SUCCESS) {
-        params.shell_base = (void*)0x3000000;
+        params.shell_size = (uint64)shell_size;
+        params.shell_base = shell_base;
     } else {
         Print(L"Warning: os2.bin not found on ESP. %r\n", status);
     }
 
     /* 3. Prepare System Disk (Ramdisk) */
     params.ramdisk_size = 16 * 1024 * 1024;
-    EFI_PHYSICAL_ADDRESS disk_addr = 0x4000000;
+    EFI_PHYSICAL_ADDRESS disk_addr = 0;
     UINTN disk_pages = (params.ramdisk_size + 4095) / 4096;
-    status = SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, disk_pages, &disk_addr);
+    status = SystemTable->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, disk_pages, &disk_addr);
     if (status == EFI_SUCCESS) {
         params.ramdisk_base = (void*)disk_addr;
         /* Zero the disk */
@@ -97,9 +109,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     /* 4. Allocate Heap */
     UINTN heap_size = (UINTN)CONFIG_HEAP_SIZE_MB * 1024 * 1024;
-    EFI_PHYSICAL_ADDRESS heap_addr = CONFIG_HEAP_BASE;
+    EFI_PHYSICAL_ADDRESS heap_addr = 0;
     UINTN heap_pages = (heap_size + 4095) / 4096;
-    status = SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, heap_pages, &heap_addr);
+    status = SystemTable->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, heap_pages, &heap_addr);
     if (status == EFI_SUCCESS) {
         params.heap_base = (void*)heap_addr;
         params.heap_size = (uint64)heap_size;
@@ -113,19 +125,28 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     Print(L"Exiting Boot Services and jumping to kernel_main...\n");
 
-    /* 5. Exit Boot Services */
+    /* 5. Exit Boot Services with Retry Loop */
     UINTN map_size = 0, map_key = 0, descriptor_size = 0;
     UINT32 descriptor_version = 0;
-    SystemTable->BootServices->GetMemoryMap(&map_size, (void*)0, &map_key, &descriptor_size, &descriptor_version);
-    map_size += 2 * descriptor_size;
-    void* map_buffer;
-    if (SystemTable->BootServices->AllocatePool(2, map_size, &map_buffer) == EFI_SUCCESS) {
-        if (SystemTable->BootServices->GetMemoryMap(&map_size, map_buffer, &map_key, &descriptor_size, &descriptor_version) == EFI_SUCCESS) {
-            if (SystemTable->BootServices->ExitBootServices(ImageHandle, map_key) == EFI_SUCCESS) {
-                /* Call kernel_main directly */
+    void* map_buffer = NULL;
+    int retry = 5;
+
+    while (retry--) {
+        status = SystemTable->BootServices->GetMemoryMap(&map_size, (void*)0, &map_key, &descriptor_size, &descriptor_version);
+        map_size += 4 * descriptor_size; /* Buffer for potential growth */
+
+        status = SystemTable->BootServices->AllocatePool(EfiLoaderData, map_size, &map_buffer);
+        if (status != EFI_SUCCESS) break;
+
+        status = SystemTable->BootServices->GetMemoryMap(&map_size, map_buffer, &map_key, &descriptor_size, &descriptor_version);
+        if (status == EFI_SUCCESS) {
+            status = SystemTable->BootServices->ExitBootServices(ImageHandle, map_key);
+            if (status == EFI_SUCCESS) {
                 kernel_main(&params);
             }
         }
+        SystemTable->BootServices->FreePool(map_buffer);
+        map_buffer = NULL;
     }
 
     while(1) { __asm__ volatile("hlt"); }
