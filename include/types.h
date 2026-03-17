@@ -20,7 +20,7 @@ typedef unsigned long      uintptr_t;
 
 typedef unsigned long      size_t;
 
-#if !defined(_EFI_H) && !defined(_EFI_BIND_H) && !defined(_EFIBIND_H_) && !defined(__EFI_TYPES_H__) && !defined(_EFI_TYPES_H)
+#if !defined(_EFI_H) && !defined(_EFI_BIND_H) && !defined(_EFIBIND_H_) && !defined(__EFI_TYPES_H__) && !defined(_EFI_TYPES_H) && !defined(X86_64_EFI_BIND) && !defined(_EFI_INCLUDE_)
 typedef unsigned long     UINTN;
 typedef long              INTN;
 typedef uint16            CHAR16;
