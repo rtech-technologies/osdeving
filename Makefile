@@ -113,13 +113,27 @@ disk: all
 	mcopy -i disk.img@@1M $(BOOT_DIR)/os2.bin ::/os2.bin
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
 
-# Create a bootable UEFI ISO
+# Create a bootable UEFI ISO (Dual-method)
 iso: all
 	@echo "Creating bootable UEFI ISO image..."
 	mkdir -p iso/EFI/BOOT
 	cp $(EFI_DIR)/BOOTX64.EFI iso/EFI/BOOT/BOOTX64.EFI
 	cp $(BOOT_DIR)/os2.bin iso/os2.bin
-	xorriso -as mkisofs -R -f -e /EFI/BOOT/BOOTX64.EFI -no-emul-boot -o boot.iso iso/
+	# Create a FAT image for the EFI boot sector
+	dd if=/dev/zero of=efiboot.img bs=1K count=8192
+	mformat -i efiboot.img -F ::
+	mmd -i efiboot.img ::/EFI
+	mmd -i efiboot.img ::/EFI/BOOT
+	mcopy -i efiboot.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/os2.bin
+	cp efiboot.img iso/efiboot.img
+	xorriso -as mkisofs \
+		-R -f \
+		-e efiboot.img \
+		-no-emul-boot \
+		-eltorito-platform efi \
+		-o boot.iso iso/
+	rm efiboot.img
 	@echo "OSx2 Boot ISO Ready (boot.iso)."
 
 run: iso
