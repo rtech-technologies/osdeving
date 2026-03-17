@@ -102,7 +102,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     status = SystemTable->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, heap_pages, &heap_addr);
     if (status == EFI_SUCCESS) {
         params.heap_base = (void*)heap_addr;
-        params.heap_size = (UINT64)heap_size;
+        params.heap_size = (uint64)heap_size;
+        /* Zero the heap */
+        UINT8* p = (UINT8*)params.heap_base;
+        for (UINT64 i = 0; i < (UINT64)heap_size; i++) p[i] = 0;
     }
 
     params.SystemTable = SystemTable;

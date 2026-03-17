@@ -41,8 +41,9 @@ void* alloc(uint64 size) {
 
     /* Use configurable heap size limit from config.h */
     uint64 max_heap = (uint64)CONFIG_HEAP_SIZE_MB * 1024 * 1024;
+    uint64 effective_limit = (kboot_params.heap_size < max_heap && kboot_params.heap_size > 0) ? kboot_params.heap_size : max_heap;
 
-    if (heap_ptr + total_size > max_heap || heap_ptr + total_size > kboot_params.heap_size) {
+    if (heap_ptr + total_size > effective_limit) {
         return (void*)0;
     }
 
