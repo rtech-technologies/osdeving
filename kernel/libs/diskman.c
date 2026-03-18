@@ -10,14 +10,19 @@ static gpt_header_t current_gpt;
 static gpt_entry_t  entries[128];
 
 void diskman_init() {
-    /* For v0 memory disk, we skip GPT auto-init if signature isn't found to avoid FAT corruption */
+    /* Check for GPT on the ramdisk */
     if (read_sectors(1, 1, &current_gpt)) {
         if (current_gpt.signature == GPT_SIGNATURE) {
             read_sectors(current_gpt.partition_entry_lba,
                          (current_gpt.num_partition_entries * current_gpt.size_partition_entry + 511) / 512,
                          entries);
         } else {
-             print("Diskman: No GPT found on ramdisk.\n");
+             /*
+              * If no GPT is found, we may be booting from a 'naked' FAT partition
+              * mapped to the ramdisk. We allow it to pass for compatibility,
+              * but won't be able to mount sub-partitions.
+              */
+             print("Diskman: No GPT found on ramdisk. Assuming single volume.\n");
         }
     }
 }

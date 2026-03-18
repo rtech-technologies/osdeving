@@ -100,7 +100,7 @@ programs/%.o: programs/%.c $(HEADERS)
 	$(CC) -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -ffreestanding -c $< -o $@
 
 # Advanced Tools: Create Bootable UEFI Disk Image
-disk: all
+disk: all $(BOOT_DIR)/ramdisk.img
 	@echo "Creating bootable UEFI disk image..."
 	dd if=/dev/zero of=disk.img bs=1M count=64
 	parted disk.img -s mklabel gpt
@@ -111,23 +111,29 @@ disk: all
 	mmd -i disk.img@@1M ::/EFI/BOOT
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img@@1M $(BOOT_DIR)/os2.bin ::/os2.bin
+	mcopy -i disk.img@@1M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
 
+$(BOOT_DIR)/ramdisk.img:
+	@echo "Generating system ramdisk..."
+	dd if=/dev/zero of=$(BOOT_DIR)/ramdisk.img bs=1M count=16
+	mformat -i $(BOOT_DIR)/ramdisk.img -F -v "OSX2_RAM" ::
+
 # Create a bootable UEFI ISO (Dual-method)
-iso: all
+iso: all $(BOOT_DIR)/ramdisk.img
 	@echo "Creating bootable UEFI ISO image..."
 	mkdir -p iso/EFI/BOOT
 	cp $(EFI_DIR)/BOOTX64.EFI iso/EFI/BOOT/BOOTX64.EFI
 	cp $(BOOT_DIR)/os2.bin iso/os2.bin
-	# Create a FAT image for the EFI boot sector
-	dd if=/dev/zero of=efiboot.img bs=1K count=8192
-	mformat -i efiboot.img -F ::
+	cp $(BOOT_DIR)/ramdisk.img iso/ramdisk.img
+	# Create a FAT image for the EFI boot sector (24MB for space)
+	dd if=/dev/zero of=efiboot.img bs=1M count=24
+	mformat -i efiboot.img -F -v "BOOT" ::
 	mmd -i efiboot.img ::/EFI
 	mmd -i efiboot.img ::/EFI/BOOT
 	mcopy -i efiboot.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/os2.bin
-	mmd -i efiboot.img ::/OS2
-	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/OS2/os2.bin
+	mcopy -i efiboot.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	cp efiboot.img iso/efiboot.img
 	xorriso -as mkisofs \
 		-R -f \
@@ -148,7 +154,7 @@ setup:
 # Cleanup
 clean:
 	@find . -name "*.o" -delete
-	@rm -f kernel.so $(BOOT_DIR)/os2.bin disk.img boot.iso
+	@rm -f kernel.so $(BOOT_DIR)/os2.bin $(BOOT_DIR)/ramdisk.img disk.img boot.iso
 	@rm -rf $(BOOT_DIR)/EFI iso
 	@echo "Build artifacts removed."
 

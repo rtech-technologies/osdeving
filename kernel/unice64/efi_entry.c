@@ -96,15 +96,24 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     }
 
     /* 3. Prepare System Disk (Ramdisk) */
-    params.ramdisk_size = 16 * 1024 * 1024;
-    EFI_PHYSICAL_ADDRESS disk_addr = 0;
-    UINTN disk_pages = (params.ramdisk_size + 4095) / 4096;
-    status = SystemTable->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, disk_pages, &disk_addr);
+    /* Attempt to load ramdisk.img from boot volume, otherwise create blank */
+    UINT64 ramdisk_size = 16 * 1024 * 1024;
+    void* ramdisk_base = NULL;
+    status = load_file(SystemTable, root, L"ramdisk.img", 0, AllocateAnyPages, EfiLoaderData, &ramdisk_size, &ramdisk_base);
+    params.ramdisk_size = (uint64)ramdisk_size;
     if (status == EFI_SUCCESS) {
-        params.ramdisk_base = (void*)disk_addr;
-        /* Zero the disk */
-        UINT8* p = (UINT8*)params.ramdisk_base;
-        for (UINT64 i = 0; i < params.ramdisk_size; i++) p[i] = 0;
+        params.ramdisk_base = ramdisk_base;
+    } else {
+        /* Create fallback zeroed ramdisk */
+        EFI_PHYSICAL_ADDRESS disk_addr = 0;
+        UINTN disk_pages = (params.ramdisk_size + 4095) / 4096;
+        status = SystemTable->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, disk_pages, &disk_addr);
+        if (status == EFI_SUCCESS) {
+            params.ramdisk_base = (void*)disk_addr;
+            /* Zero the disk */
+            UINT8* p = (UINT8*)params.ramdisk_base;
+            for (UINT64 i = 0; i < params.ramdisk_size; i++) p[i] = 0;
+        }
     }
 
     /* 4. Allocate Heap */
