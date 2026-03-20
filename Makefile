@@ -126,19 +126,26 @@ iso: all $(BOOT_DIR)/ramdisk.img
 	cp $(EFI_DIR)/BOOTX64.EFI iso/EFI/BOOT/BOOTX64.EFI
 	cp $(BOOT_DIR)/os2.bin iso/os2.bin
 	cp $(BOOT_DIR)/ramdisk.img iso/ramdisk.img
-	# Create a FAT image for the EFI boot sector (24MB for space)
-	dd if=/dev/zero of=efiboot.img bs=1M count=24
-	mformat -i efiboot.img -F -v "BOOT" ::
+	# 1. Create a larger, 32MB boot image to ensure FAT32 stability
+	dd if=/dev/zero of=efiboot.img bs=1M count=32
+	mkfs.vfat -n "OSX2BOOT" efiboot.img
+	# 2. Use mtools to populate the FAT image
 	mmd -i efiboot.img ::/EFI
 	mmd -i efiboot.img ::/EFI/BOOT
 	mcopy -i efiboot.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/os2.bin
 	mcopy -i efiboot.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
+	# 3. Create the startup.nsh (The "Auto-Run" Sledgehammer)
+	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > startup.nsh
+	mcopy -i efiboot.img startup.nsh ::/startup.nsh
+	rm startup.nsh
 	cp efiboot.img iso/efiboot.img
+	# 4. Use the "Hybrid" xorriso flags
 	xorriso -as mkisofs \
-		-R -f \
+		-R -J -f \
 		-e efiboot.img \
 		-no-emul-boot \
+		-isohybrid-gpt-basdat \
 		-eltorito-platform efi \
 		-o boot.iso iso/
 	rm efiboot.img
