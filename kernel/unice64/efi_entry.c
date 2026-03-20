@@ -83,23 +83,56 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         while(1);
     }
 
+    /* Multi-Partition Discovery Loop */
+    EFI_HANDLE* handles;
+    UINTN num_handles;
+    status = SystemTable->BootServices->LocateHandleBuffer(ByProtocol, &fs_g, NULL, &num_handles, &handles);
+
+    EFI_FILE_PROTOCOL* os_root = NULL;
+    if (status == EFI_SUCCESS) {
+        for (UINTN i = 0; i < num_handles; i++) {
+            EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* test_fs;
+            if (SystemTable->BootServices->HandleProtocol(handles[i], &fs_g, (void**)&test_fs) == EFI_SUCCESS) {
+                EFI_FILE_PROTOCOL* test_root;
+                if (test_fs->OpenVolume(test_fs, &test_root) == EFI_SUCCESS) {
+                    EFI_FILE_PROTOCOL* test_file;
+                    if (test_root->Open(test_root, &test_file, L"os2.bin", EFI_FILE_MODE_READ, 0) == EFI_SUCCESS) {
+                        os_root = test_root;
+                        test_file->Close(test_file);
+                        Print(L"Found OS Partition!\n");
+                        break;
+                    }
+                    test_root->Close(test_root);
+                }
+            }
+        }
+    }
+
+    if (!os_root) {
+        Print(L"Warning: os2.bin not found in multi-volume search. Falling back to boot volume.\n");
+        os_root = root;
+    } else {
+        /* Close the original ESP root if we found a better volume */
+        if (os_root != root) root->Close(root);
+    }
+
     /* Load Kernel (Sheep) at 48MB (or wherever specified) */
     /* Using EfiLoaderCode for execution compatibility */
     UINT64 shell_size = 0;
     void* shell_base = NULL;
-    status = load_file(SystemTable, root, L"os2.bin", 0x3000000, AllocateAddress, EfiLoaderCode, &shell_size, &shell_base);
+    status = load_file(SystemTable, os_root, L"os2.bin", 0x3000000, AllocateAddress, EfiLoaderCode, &shell_size, &shell_base);
     if (status == EFI_SUCCESS) {
         params.shell_size = (uint64)shell_size;
         params.shell_base = shell_base;
     } else {
-        Print(L"Warning: os2.bin not found on ESP. %r\n", status);
+        Print(L"Warning: os2.bin not found on OS partition. %r\n", status);
     }
 
     /* 3. Prepare System Disk (Ramdisk) */
     /* Attempt to load ramdisk.img from boot volume, otherwise create blank */
-    UINT64 ramdisk_size = 16 * 1024 * 1024;
+    UINT64 ramdisk_size = 512 * 1024 * 1024; /* Support up to 512MB ramdisk */
     void* ramdisk_base = NULL;
-    status = load_file(SystemTable, root, L"ramdisk.img", 0, AllocateAnyPages, EfiLoaderData, &ramdisk_size, &ramdisk_base);
+    status = load_file(SystemTable, os_root, L"ramdisk.img", 0, AllocateAnyPages, EfiLoaderData, &ramdisk_size, &ramdisk_base);
     params.ramdisk_size = (uint64)ramdisk_size;
     if (status == EFI_SUCCESS) {
         params.ramdisk_base = ramdisk_base;

@@ -99,19 +99,27 @@ $(BOOT_DIR)/os2.bin: $(SHELL_OBJS)
 programs/%.o: programs/%.c $(HEADERS)
 	$(CC) -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -ffreestanding -c $< -o $@
 
-# Advanced Tools: Create Bootable UEFI Disk Image
+# Advanced Tools: Create Bootable UEFI Disk Image (Multi-Partition)
 disk: all $(BOOT_DIR)/ramdisk.img
-	@echo "Creating bootable UEFI disk image..."
-	dd if=/dev/zero of=disk.img bs=1M count=64
+	@echo "Creating bootable UEFI disk image (Large/Multi-Partition)..."
+	dd if=/dev/zero of=disk.img bs=1M count=640
 	parted disk.img -s mklabel gpt
-	parted disk.img -s mkpart primary fat32 2048s 100%
+	# Partition 1: ESP (128MB)
+	parted disk.img -s mkpart primary fat32 2048s 264191s
 	parted disk.img -s set 1 esp on
-	mformat -i disk.img@@1M -F -v "OSX2" ::
+	# Partition 2: OS (Rest)
+	parted disk.img -s mkpart primary fat32 264192s 100%
+
+	# Populate Partition 1 (ESP) - UEFI ONLY
+	mformat -i disk.img@@1M -F -v "ESP" ::
 	mmd -i disk.img@@1M ::/EFI
 	mmd -i disk.img@@1M ::/EFI/BOOT
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-	mcopy -i disk.img@@1M $(BOOT_DIR)/os2.bin ::/os2.bin
-	mcopy -i disk.img@@1M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
+
+	# Populate Partition 2 (OS) - Sheep ONLY
+	mformat -i disk.img@@129M -F -v "OSX2_OS" ::
+	mcopy -i disk.img@@129M $(BOOT_DIR)/os2.bin ::/os2.bin
+	mcopy -i disk.img@@129M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
 
 $(BOOT_DIR)/ramdisk.img:
@@ -119,22 +127,20 @@ $(BOOT_DIR)/ramdisk.img:
 	dd if=/dev/zero of=$(BOOT_DIR)/ramdisk.img bs=1M count=16
 	mformat -i $(BOOT_DIR)/ramdisk.img -F -v "OSX2_RAM" ::
 
-# Create a bootable UEFI ISO (Dual-method)
+# Create a bootable UEFI ISO (Dual-method / Multi-Volume)
 iso: all $(BOOT_DIR)/ramdisk.img
-	@echo "Creating bootable UEFI ISO image..."
+	@echo "Creating bootable UEFI ISO image (Multi-Volume)..."
 	mkdir -p iso/EFI/BOOT
 	cp $(EFI_DIR)/BOOTX64.EFI iso/EFI/BOOT/BOOTX64.EFI
 	cp $(BOOT_DIR)/os2.bin iso/os2.bin
 	cp $(BOOT_DIR)/ramdisk.img iso/ramdisk.img
-	# 1. Create a larger, 32MB boot image to ensure FAT32 stability
+	# 1. Create a 32MB boot image for the EFI System Partition
 	dd if=/dev/zero of=efiboot.img bs=1M count=32
-	mkfs.vfat -n "OSX2BOOT" efiboot.img
-	# 2. Use mtools to populate the FAT image
+	mkfs.vfat -n "ESP" efiboot.img
+	# 2. Use mtools to populate the ESP image - LOADER ONLY
 	mmd -i efiboot.img ::/EFI
 	mmd -i efiboot.img ::/EFI/BOOT
 	mcopy -i efiboot.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-	mcopy -i efiboot.img $(BOOT_DIR)/os2.bin ::/os2.bin
-	mcopy -i efiboot.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	# 3. Create the startup.nsh (The "Auto-Run" Sledgehammer)
 	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > startup.nsh
 	mcopy -i efiboot.img startup.nsh ::/startup.nsh
