@@ -27,7 +27,6 @@ extern int running;
 extern boot_params_t kboot_params;
 
 /* Entry point defined in main.c */
-#include <efi.h>
 void EFIAPI kernel_main(boot_params_t* params);
 
 /* GDT initialization */

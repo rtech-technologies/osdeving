@@ -120,7 +120,8 @@ disk: all $(BOOT_DIR)/ramdisk.img
 	rm startup.nsh
 
 	# Populate Partition 2 (OS) - Sheep ONLY
-	mkfs.vfat -F 32 -n "OSX2_OS" --offset=264192 disk.img 1048576
+	# 600MB = 614400 1KB blocks
+	mkfs.vfat -F 32 -n "OSX2_OS" --offset=264192 disk.img 614400
 	mcopy -i disk.img@@129M $(BOOT_DIR)/os2.bin ::/os2.bin
 	mcopy -i disk.img@@129M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."

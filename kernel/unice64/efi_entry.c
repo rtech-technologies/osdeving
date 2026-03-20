@@ -206,6 +206,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         map_buffer = NULL;
     }
 
+    Print(L"FATAL: ExitBootServices failed after retries!\n");
     while(1) { __asm__ volatile("hlt"); }
     return EFI_SUCCESS;
 }

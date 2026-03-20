@@ -24,11 +24,25 @@ typedef unsigned long      size_t;
 typedef unsigned long     UINTN;
 typedef long              INTN;
 typedef uint16            CHAR16;
+
+#ifndef _CHAR8_DEFINED
+#define _CHAR8_DEFINED
 typedef uint8             CHAR8;
+#endif
 
 typedef void*             EFI_HANDLE;
 typedef UINTN             EFI_STATUS;
 typedef unsigned long     EFI_PHYSICAL_ADDRESS;
+#endif
+
+#ifndef EFIAPI
+ #if defined(_MSVC_LANG) || defined(_MSC_VER)
+  #define EFIAPI __cdecl
+ #elif defined(__GNUC__) || defined(__clang__)
+  #define EFIAPI __attribute__((ms_abi))
+ #else
+  #define EFIAPI
+ #endif
 #endif
 
 #ifndef NULL
