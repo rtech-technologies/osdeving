@@ -102,7 +102,7 @@ programs/%.o: programs/%.c $(HEADERS)
 # Advanced Tools: Create Bootable UEFI Disk Image (Multi-Partition)
 disk: all $(BOOT_DIR)/ramdisk.img
 	@echo "Creating bootable UEFI disk image (Large/Multi-Partition)..."
-	dd if=/dev/zero of=disk.img bs=1M count=640
+	dd if=/dev/zero of=disk.img bs=1M count=850
 	parted disk.img -s mklabel gpt
 	# Partition 1: ESP (128MB)
 	parted disk.img -s mkpart primary fat32 2048s 264191s
@@ -117,7 +117,7 @@ disk: all $(BOOT_DIR)/ramdisk.img
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 
 	# Populate Partition 2 (OS) - Sheep ONLY
-	mformat -i disk.img@@129M -F -v "OSX2_OS" ::
+	mkfs.vfat -F 32 -n "OSX2_OS" --offset=264192 disk.img 1048576
 	mcopy -i disk.img@@129M $(BOOT_DIR)/os2.bin ::/os2.bin
 	mcopy -i disk.img@@129M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
@@ -125,7 +125,7 @@ disk: all $(BOOT_DIR)/ramdisk.img
 $(BOOT_DIR)/ramdisk.img:
 	@echo "Generating system ramdisk..."
 	dd if=/dev/zero of=$(BOOT_DIR)/ramdisk.img bs=1M count=16
-	mformat -i $(BOOT_DIR)/ramdisk.img -F -v "OSX2_RAM" ::
+	mkfs.vfat -F 32 -n "OSX2_RAM" $(BOOT_DIR)/ramdisk.img
 
 # Create a bootable UEFI ISO (Dual-method / Multi-Volume)
 iso: all $(BOOT_DIR)/ramdisk.img

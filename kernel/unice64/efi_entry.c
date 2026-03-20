@@ -71,9 +71,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         while(1);
     }
 
+    fs = NULL;
     status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
-    if (status != EFI_SUCCESS) {
-        Print(L"FATAL: FileSystem Protocol Failed! %r\n", status);
+    if (status != EFI_SUCCESS || fs == NULL) {
+        Print(L"FATAL: FileSystem Protocol Failed! %r (fs=%p)\n", status, fs);
+        Print(L"This usually means the boot partition is not correctly recognized.\n");
         while(1);
     }
 
@@ -115,6 +117,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         /* Close the original ESP root if we found a better volume */
         if (os_root != root) root->Close(root);
     }
+
+    if (handles) SystemTable->BootServices->FreePool(handles);
 
     /* Load Kernel (Sheep) at 48MB (or wherever specified) */
     /* Using EfiLoaderCode for execution compatibility */
