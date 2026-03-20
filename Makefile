@@ -115,6 +115,9 @@ disk: all $(BOOT_DIR)/ramdisk.img
 	mmd -i disk.img@@1M ::/EFI
 	mmd -i disk.img@@1M ::/EFI/BOOT
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > startup.nsh
+	mcopy -i disk.img@@1M startup.nsh ::/startup.nsh
+	rm startup.nsh
 
 	# Populate Partition 2 (OS) - Sheep ONLY
 	mkfs.vfat -F 32 -n "OSX2_OS" --offset=264192 disk.img 1048576

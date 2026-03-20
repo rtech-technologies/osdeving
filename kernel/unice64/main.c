@@ -33,7 +33,11 @@ void exit_kernel() {
 /*
  * The God-Machine Entry Point
  */
-void kernel_main(boot_params_t* params) {
+void EFIAPI kernel_main(boot_params_t* params) {
+    if (!params) {
+        /* Cannot Print yet, console not initialized */
+        while(1) { __asm__ volatile("hlt"); }
+    }
     kboot_params = *params;
 
     /* GDT and Interrupts are usually reset after ExitBootServices for full control */

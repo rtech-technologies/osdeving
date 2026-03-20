@@ -10,6 +10,7 @@ static EFI_GUID fs_g = SIMPLE_FILE_SYSTEM_PROTOCOL;
 static EFI_GUID gop_g = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 
 static EFI_STATUS load_file(EFI_SYSTEM_TABLE *ST, EFI_FILE_PROTOCOL *root, CHAR16 *name, EFI_PHYSICAL_ADDRESS addr, EFI_ALLOCATE_TYPE type, EFI_MEMORY_TYPE mem_type, UINT64 *out_size, void **out_ptr) {
+    if (!root) return EFI_INVALID_PARAMETER;
     EFI_FILE_PROTOCOL *file;
     EFI_STATUS status = root->Open(root, &file, name, EFI_FILE_MODE_READ, 0);
     if (status != EFI_SUCCESS) return status;
@@ -72,16 +73,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     }
 
     fs = NULL;
+    fs = NULL;
     status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
     if (status != EFI_SUCCESS || fs == NULL) {
-        Print(L"FATAL: FileSystem Protocol Failed! %r (fs=%p)\n", status, fs);
+        Print(L"Opaque Error: FileSystem is NULL! (Status: %r)\n", status);
         Print(L"This usually means the boot partition is not correctly recognized.\n");
         while(1);
     }
 
     status = fs->OpenVolume(fs, &root);
-    if (status != EFI_SUCCESS) {
-        Print(L"FATAL: Could not open root volume! %r\n", status);
+    if (status != EFI_SUCCESS || root == NULL) {
+        Print(L"Opaque Error: Root Volume is NULL! (Status: %r)\n", status);
         while(1);
     }
 
@@ -124,6 +126,15 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     /* Using EfiLoaderCode for execution compatibility */
     UINT64 shell_size = 0;
     void* shell_base = NULL;
+
+    /* Overlap Check: Ensure Stage 2 doesn't hit the framebuffer */
+    EFI_PHYSICAL_ADDRESS fb_base = (EFI_PHYSICAL_ADDRESS)params.framebuffer;
+    EFI_PHYSICAL_ADDRESS fb_end = fb_base + (params.height * params.pixels_per_scanline * 4);
+    if (0x3000000 < fb_end && (0x3000000 + 16*1024*1024) > fb_base) {
+        Print(L"Opaque Error: Stage 2 load address overlaps with Framebuffer!\n");
+        while(1);
+    }
+
     status = load_file(SystemTable, os_root, L"os2.bin", 0x3000000, AllocateAddress, EfiLoaderCode, &shell_size, &shell_base);
     if (status == EFI_SUCCESS) {
         params.shell_size = (uint64)shell_size;
