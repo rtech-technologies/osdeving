@@ -155,16 +155,16 @@ iso: all $(BOOT_DIR)/ramdisk.img
 	mcopy -i ospart.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 
 	# 3. Create Hybrid ISO
+	mv esp.img iso/esp.img
+	mv ospart.img iso/ospart.img
 	xorriso -as mkisofs \
 		-R -J -V "OSX2_INSTALL" \
 		-eltorito-platform efi \
 		-e esp.img -no-emul-boot \
-		-append_partition 2 0xef esp.img \
-		-append_partition 3 0x07 ospart.img \
+		-append_partition 2 0xef iso/esp.img \
+		-append_partition 3 0x07 iso/ospart.img \
 		-isohybrid-gpt-basdat \
 		-o boot.iso iso/
-
-	rm esp.img ospart.img
 	@echo "OSx2 Boot ISO Ready (boot.iso)."
 
 run: iso
