@@ -65,21 +65,12 @@ void color(uint32 fg, uint32 bg) {
 }
 
 void lsfs() {
-    if (g_syscalls && g_syscalls->lsfs) {
-        g_syscalls->lsfs();
-    }
 }
 
 void format(int idx) {
-    if (g_syscalls && g_syscalls->format) {
-        g_syscalls->format(idx);
-    }
 }
 
 void mount(int idx) {
-    if (g_syscalls && g_syscalls->mount) {
-        g_syscalls->mount(idx);
-    }
 }
 
 void addpart(uint64 start, uint32 count) {
@@ -195,8 +186,11 @@ void itoa(int n, char* s, int base) {
     }
 }
 
-__attribute__((section(".text._start")))
-void _start(boot_params_t* params, rsl_syscall_table_t* syscalls) {
+void kernel_entry(boot_params_t* params, rsl_syscall_table_t* syscalls) {
+    /* Serial Heartbeat 'C' (C Entry) */
+    #define COM1 0x3F8
+    __asm__ volatile ("outb %0, %1" : : "a"((unsigned char)'C'), "Nd"((unsigned short)COM1));
+
     if (params) kboot_params = *params;
     if (syscalls) g_syscalls = syscalls;
     program_main();

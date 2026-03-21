@@ -11,6 +11,9 @@ void k_memset(void* s, int c, uint64 n);
 void itoa(int n, char* s, int base);
 uint32 crc32(const void* data, uint64 len);
 
+void serial_init();
+void serial_print(const char* str);
+
 /* Alias for kernel use if needed, but we'll use k_ prefix to avoid conflicts with gnu-efi */
 #define memcpy k_memcpy
 #define memset k_memset

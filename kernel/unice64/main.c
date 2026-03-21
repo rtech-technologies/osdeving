@@ -9,7 +9,6 @@
 #include "../libs/disk.h"
 #include "../libs/diskman.h"
 #include "../libs/fs.h"
-#include "../libs/rnafs.h"
 #include "../libs/loader.h"
 #include "../libs/core/event.h"
 
@@ -34,8 +33,9 @@ void exit_kernel() {
  * The God-Machine Entry Point
  */
 void EFIAPI kernel_main(boot_params_t* params) {
+    serial_init();
     if (!params) {
-        /* Cannot Print yet, console not initialized */
+        serial_print("FATAL: EFI passed NULL to Self-Sustaining Kernel\n");
         while(1) { __asm__ volatile("hlt"); }
     }
     kboot_params = *params;
@@ -72,10 +72,10 @@ void EFIAPI kernel_main(boot_params_t* params) {
         .exit = exit_kernel,
         .clear = console_clear,
         .set_color = console_set_color,
-        .format = diskman_format_rnafs,
-        .mount = diskman_mount_rnafs,
+        .format = (void*)0,
+        .mount = (void*)0,
         .addpart = diskman_add_partition,
-        .lsfs = rnafs_ls
+        .lsfs = (void*)0
     };
 
     loader_run_shell(&syscalls);

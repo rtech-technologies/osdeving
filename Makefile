@@ -47,12 +47,11 @@ KERNEL_OBJS = $(KERNEL_DIR)/efi_entry.o \
               $(LIBS_DIR)/diskman.o \
               $(LIBS_DIR)/memory.o \
               $(LIBS_DIR)/fs.o \
-              $(LIBS_DIR)/rnafs.o \
               $(LIBS_DIR)/loader.o \
               $(LIBS_DIR)/core/event.o
 
-SHELL_SRCS = programs/libsystem.c programs/shell.c
-SHELL_OBJS = $(SHELL_SRCS:.c=.o)
+SHELL_SRCS = programs/entry.S programs/libsystem.c programs/shell.c
+SHELL_OBJS = programs/entry.o programs/libsystem.o programs/shell.o
 
 HEADERS = $(shell find include kernel -name "*.h")
 
@@ -92,17 +91,20 @@ $(LIBS_DIR)/%.o: $(LIBS_DIR)/%.c $(HEADERS)
 $(LIBS_DIR)/core/%.o: $(LIBS_DIR)/core/%.c $(HEADERS)
 	$(CC) $(CFLAGS_EFI) -c $< -o $@
 
-# Programs (Still raw binary for simplicity in loading)
+# Programs (Pure Flat Binary)
 $(BOOT_DIR)/os2.bin: $(SHELL_OBJS)
 	$(LD) $(LDFLAGS_SHELL) $(SHELL_OBJS) -o $(BOOT_DIR)/os2.bin
 
 programs/%.o: programs/%.c $(HEADERS)
-	$(CC) -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -ffreestanding -c $< -o $@
+	$(CC) -Iinclude -ffreestanding -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -nostdlib -static -c $< -o $@
+
+programs/%.o: programs/%.S
+	$(CC) -Iinclude -c $< -o $@
 
 # Advanced Tools: Create Bootable UEFI Disk Image (Multi-Partition)
 disk: all $(BOOT_DIR)/ramdisk.img
 	@echo "Creating bootable UEFI disk image (Large/Multi-Partition)..."
-	dd if=/dev/zero of=disk.img bs=1M count=850
+	dd if=/dev/zero of=disk.img bs=1M count=1024
 	parted disk.img -s mklabel gpt
 	# Partition 1: ESP (128MB)
 	parted disk.img -s mkpart primary fat32 2048s 264191s
@@ -111,7 +113,7 @@ disk: all $(BOOT_DIR)/ramdisk.img
 	parted disk.img -s mkpart primary fat32 264192s 100%
 
 	# Populate Partition 1 (ESP) - UEFI ONLY
-	mformat -i disk.img@@1M -F -v "ESP" ::
+	mkfs.vfat -F 32 -n "ESP" --offset=2048 disk.img 131072
 	mmd -i disk.img@@1M ::/EFI
 	mmd -i disk.img@@1M ::/EFI/BOOT
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
@@ -131,34 +133,38 @@ $(BOOT_DIR)/ramdisk.img:
 	dd if=/dev/zero of=$(BOOT_DIR)/ramdisk.img bs=1M count=16
 	mkfs.vfat -F 32 -n "OSX2_RAM" $(BOOT_DIR)/ramdisk.img
 
-# Create a bootable UEFI ISO (Dual-method / Multi-Volume)
+# Create a bootable UEFI ISO (True Hybrid / Multi-Partition)
 iso: all $(BOOT_DIR)/ramdisk.img
-	@echo "Creating bootable UEFI ISO image (Multi-Volume)..."
+	@echo "Creating bootable UEFI ISO image (Multi-Partition Hybrid)..."
 	mkdir -p iso/EFI/BOOT
-	cp $(EFI_DIR)/BOOTX64.EFI iso/EFI/BOOT/BOOTX64.EFI
-	cp $(BOOT_DIR)/os2.bin iso/os2.bin
-	cp $(BOOT_DIR)/ramdisk.img iso/ramdisk.img
-	# 1. Create a 32MB boot image for the EFI System Partition
-	dd if=/dev/zero of=efiboot.img bs=1M count=32
-	mkfs.vfat -n "ESP" efiboot.img
-	# 2. Use mtools to populate the ESP image - LOADER ONLY
-	mmd -i efiboot.img ::/EFI
-	mmd -i efiboot.img ::/EFI/BOOT
-	mcopy -i efiboot.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-	# 3. Create the startup.nsh (The "Auto-Run" Sledgehammer)
+
+	# 1. Create the ESP image (64MB)
+	dd if=/dev/zero of=esp.img bs=1M count=64
+	mkfs.vfat -F 32 -n "ESP" esp.img
+	mmd -i esp.img ::/EFI
+	mmd -i esp.img ::/EFI/BOOT
+	mcopy -i esp.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
 	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > startup.nsh
-	mcopy -i efiboot.img startup.nsh ::/startup.nsh
+	mcopy -i esp.img startup.nsh ::/startup.nsh
 	rm startup.nsh
-	cp efiboot.img iso/efiboot.img
-	# 4. Use the "Hybrid" xorriso flags
+
+	# 2. Create the OS Partition image (800MB)
+	dd if=/dev/zero of=ospart.img bs=1M count=800
+	mkfs.vfat -F 32 -n "OSX2_OS" ospart.img
+	mcopy -i ospart.img $(BOOT_DIR)/os2.bin ::/os2.bin
+	mcopy -i ospart.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
+
+	# 3. Create Hybrid ISO
 	xorriso -as mkisofs \
-		-R -J -f \
-		-e efiboot.img \
-		-no-emul-boot \
-		-isohybrid-gpt-basdat \
+		-R -J -V "OSX2_INSTALL" \
 		-eltorito-platform efi \
+		-e esp.img -no-emul-boot \
+		-append_partition 2 0xef esp.img \
+		-append_partition 3 0x07 ospart.img \
+		-isohybrid-gpt-basdat \
 		-o boot.iso iso/
-	rm efiboot.img
+
+	rm esp.img ospart.img
 	@echo "OSx2 Boot ISO Ready (boot.iso)."
 
 run: iso

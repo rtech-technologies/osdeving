@@ -3,6 +3,7 @@
 #include "../../include/config.h"
 #include "../../include/types.h"
 #include "../../include/rsl.h"
+#include "../libs/kutils.h"
 #include "kernel.h"
 
 static EFI_GUID li_g = LOADED_IMAGE_PROTOCOL;
@@ -46,10 +47,12 @@ static EFI_STATUS load_file(EFI_SYSTEM_TABLE *ST, EFI_FILE_PROTOCOL *root, CHAR1
 
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
+    serial_init();
     boot_params_t params = {0};
     EFI_STATUS status;
 
     Print(L"OSx2 Native EFI Kernel Booting...\n");
+    serial_print("OSx2: UEFI Entry Point reached.\n");
 
     /* 1. Get Graphics Info */
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
@@ -72,7 +75,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         while(1);
     }
 
-    fs = NULL;
     fs = NULL;
     status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
     if (status != EFI_SUCCESS || fs == NULL) {

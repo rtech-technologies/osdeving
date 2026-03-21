@@ -2,7 +2,6 @@
 #include "disk.h"
 #include "vdisk.h"
 #include "console.h"
-#include "rnafs.h"
 #include "kutils.h"
 #include "../../include/rsl.h"
 
@@ -77,35 +76,5 @@ void diskman_add_partition(uint64 start, uint32 count) {
             print("\n");
             return;
         }
-    }
-}
-
-void diskman_format_rnafs(int idx) {
-    if (idx < 0 || idx >= 128) return;
-    if (entries[idx].starting_lba == 0) return;
-    uint64 size = entries[idx].ending_lba - entries[idx].starting_lba + 1;
-
-    /* VDISK creation for partition */
-    char vd_name[16] = "PART";
-    itoa(idx, vd_name + 4, 10);
-    vdisk_t* vd = vdisk_open(vd_name);
-    if (vd) {
-        vd->start_lba = entries[idx].starting_lba;
-        vd->end_lba = entries[idx].ending_lba;
-        rnafs_format_vdisk(vd_name, (uint32)size);
-    }
-}
-
-void diskman_mount_rnafs(int idx) {
-    if (idx < 0 || idx >= 128) return;
-    if (entries[idx].starting_lba == 0) return;
-
-    char vd_name[16] = "PART";
-    itoa(idx, vd_name + 4, 10);
-    vdisk_t* vd = vdisk_open(vd_name);
-    if (vd) {
-        vd->start_lba = entries[idx].starting_lba;
-        vd->end_lba = entries[idx].ending_lba;
-        rnafs_mount_vdisk(vd_name);
     }
 }

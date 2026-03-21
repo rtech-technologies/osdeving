@@ -1,7 +1,7 @@
 #ifndef IO_H
 #define IO_H
 
-#include "../include/types.h"
+#include "../../include/types.h"
 
 static inline uint8 inb(uint16 port) {
     uint8 ret;
