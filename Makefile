@@ -164,9 +164,27 @@ iso: all $(BOOT_DIR)/ramdisk.img
 run: iso
 	qemu-system-x86_64 -machine q35 -bios /usr/share/ovmf/OVMF.fd -cdrom boot.iso -m 256M -serial stdio -net none
 
+debug: iso
+	qemu-system-x86_64 -machine q35 -bios /usr/share/ovmf/OVMF.fd \
+		-drive file=boot.iso,format=raw \
+		-m 2G \
+		-no-reboot -no-shutdown \
+		-d int,cpu_reset,guest_errors \
+		-D qemu.log \
+		-serial stdio \
+		-monitor vc \
+		-s -S
+
+gdb:
+	gdb -ex "target remote localhost:1234" \
+	    -ex "symbol-file kernel.so" \
+	    -ex "set architecture i386:x86-64" \
+	    -ex "layout src" \
+	    -ex "break kernel_main"
+
 setup:
 	sudo apt-get update
-	sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf mtools dosfstools xorriso parted
+	sudo apt-get install -y gnu-efi build-essential qemu-system-x86 ovmf mtools dosfstools xorriso parted gdb
 
 # Cleanup
 clean:
