@@ -93,6 +93,8 @@ void input_init() {
     outb(0x60, 0xF4);
     ps2_wait_read();
     inb(0x60);
+
+    print("Input: PS/2 Keyboard Driver initialized.\n");
 }
 
 static char get_char() {

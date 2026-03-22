@@ -7,6 +7,7 @@
 #include "../unice64/kernel.h"
 
 void loader_init() {
+    print("Loader: Stage 2 Environment Ready.\n");
 }
 
 void wheres_the_beef() {

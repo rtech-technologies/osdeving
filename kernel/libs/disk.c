@@ -4,6 +4,7 @@
 #include "../../include/rsl.h"
 
 void disk_init() {
+    print("Disk: Low-level Storage Driver initialized.\n");
 }
 
 int read_sectors(uint64 lba, uint32 count, void* buffer) {

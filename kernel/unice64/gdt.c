@@ -31,4 +31,23 @@ void gdt_init() {
     gdt_ptr.base = (uint64)&gdt;
 
     __asm__ volatile ("lgdt %0" : : "m"(gdt_ptr));
+
+    /* Reload segment registers - PIC friendly */
+    __asm__ volatile (
+        "push $0x10\n"        /* Data segment (index 2 * 8 = 16 = 0x10) */
+        "push %%rsp\n"
+        "pushfq\n"
+        "push $0x08\n"        /* Code segment (index 1 * 8 = 8 = 0x08) */
+        "lea 1f(%%rip), %%rax\n"
+        "push %%rax\n"
+        "iretq\n"
+        "1:\n"
+        "mov $0x10, %%ax\n"
+        "mov %%ax, %%ds\n"
+        "mov %%ax, %%es\n"
+        "mov %%ax, %%fs\n"
+        "mov %%ax, %%gs\n"
+        "mov %%ax, %%ss\n"
+        : : : "rax", "memory"
+    );
 }

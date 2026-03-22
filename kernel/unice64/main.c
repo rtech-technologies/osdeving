@@ -54,10 +54,12 @@ void EFIAPI kernel_main(boot_params_t* params) {
     register_service(loader_init);
 
     for (uint32 i = 0; i < service_count; i++) {
+        print("Kernel: Initializing service...\n");
         registered_services[i]();
     }
 
     print("OSx2 God-Mode: Kernel Handover Successful.\n");
+    serial_print("Kernel: Handover complete. Triggering initialization events.\n");
     debug_kernel_signature();
     trigger(EVENT_INIT);
 

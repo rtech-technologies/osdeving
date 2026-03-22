@@ -22,6 +22,8 @@ void connect_init() {
     ram0.base_addr = kboot_params.ramdisk_base;
     ram0.is_active = 1;
 
+    print("Connect: Physical Storage Inventory initialized.\n");
+
     /* ARA Collision Check: Ensure ramdisk doesn't overlap low memory or kernel */
     if ((uint64)ram0.base_addr < CONFIG_KERNEL_BASE) {
         print("CONNECT: ARA Collision Detected (Low Memory Area).\n");

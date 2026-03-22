@@ -101,68 +101,56 @@ programs/%.o: programs/%.c $(HEADERS)
 programs/%.o: programs/%.S
 	$(CC) -Iinclude -c $< -o $@
 
-# Advanced Tools: Create Bootable UEFI Disk Image (Multi-Partition)
+# Advanced Tools: Create Bootable UEFI Disk Image (GPT-ESP Edition)
 disk: all $(BOOT_DIR)/ramdisk.img
-	@echo "Creating bootable UEFI disk image (Large/Multi-Partition)..."
-	dd if=/dev/zero of=disk.img bs=1M count=1024
+	@echo "Creating bootable UEFI disk image (GPT-ESP)..."
+	dd if=/dev/zero of=disk.img bs=1M count=256
 	parted disk.img -s mklabel gpt
-	# Partition 1: ESP (128MB)
-	parted disk.img -s mkpart primary fat32 2048s 264191s
+	# Create one large ESP
+	parted disk.img -s mkpart primary fat32 2048s 100%
 	parted disk.img -s set 1 esp on
-	# Partition 2: OS (Rest)
-	parted disk.img -s mkpart primary fat32 264192s 100%
 
-	# Populate Partition 1 (ESP) - UEFI ONLY
-	mkfs.vfat -F 32 -n "ESP" --offset=2048 disk.img 131072
+	# Format the partition at 1MB offset
+	mformat -i disk.img@@1M -F -v "OSX2" ::
 	mmd -i disk.img@@1M ::/EFI
 	mmd -i disk.img@@1M ::/EFI/BOOT
 	mcopy -i disk.img@@1M $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+	mcopy -i disk.img@@1M $(BOOT_DIR)/os2.bin ::/os2.bin
+	mcopy -i disk.img@@1M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > startup.nsh
 	mcopy -i disk.img@@1M startup.nsh ::/startup.nsh
 	rm startup.nsh
-
-	# Populate Partition 2 (OS) - Sheep ONLY
-	# 600MB = 614400 1KB blocks
-	mkfs.vfat -F 32 -n "OSX2_OS" --offset=264192 disk.img 614400
-	mcopy -i disk.img@@129M $(BOOT_DIR)/os2.bin ::/os2.bin
-	mcopy -i disk.img@@129M $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
-	@echo "OSx2 Pro UEFI Disk Image Ready (disk.img)."
+	@echo "OSx2 UEFI GPT Disk Image Ready (disk.img)."
 
 $(BOOT_DIR)/ramdisk.img:
 	@echo "Generating system ramdisk..."
 	dd if=/dev/zero of=$(BOOT_DIR)/ramdisk.img bs=1M count=16
 	mkfs.vfat -F 32 -n "OSX2_RAM" $(BOOT_DIR)/ramdisk.img
 
-# Create a bootable UEFI ISO (True Hybrid / Multi-Partition)
+# Create a bootable UEFI ISO (GPT-Hybrid Edition)
 iso: all $(BOOT_DIR)/ramdisk.img
-	@echo "Creating bootable UEFI ISO image (Multi-Partition Hybrid)..."
+	@echo "Creating bootable UEFI ISO image (GPT Hybrid)..."
 	mkdir -p iso/EFI/BOOT
 
-	# 1. Create the ESP image (64MB)
-	dd if=/dev/zero of=esp.img bs=1M count=64
-	mkfs.vfat -F 32 -n "ESP" esp.img
+	# 1. Create the unified ESP image (includes Loader and Kernel)
+	dd if=/dev/zero of=esp.img bs=1M count=128
+	mkfs.vfat -F 32 -n "OSX2" esp.img
 	mmd -i esp.img ::/EFI
 	mmd -i esp.img ::/EFI/BOOT
 	mcopy -i esp.img $(EFI_DIR)/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+	mcopy -i esp.img $(BOOT_DIR)/os2.bin ::/os2.bin
+	mcopy -i esp.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
 	echo "FS0:\\EFI\\BOOT\\BOOTX64.EFI" > startup.nsh
 	mcopy -i esp.img startup.nsh ::/startup.nsh
 	rm startup.nsh
 
-	# 2. Create the OS Partition image (800MB)
-	dd if=/dev/zero of=ospart.img bs=1M count=800
-	mkfs.vfat -F 32 -n "OSX2_OS" ospart.img
-	mcopy -i ospart.img $(BOOT_DIR)/os2.bin ::/os2.bin
-	mcopy -i ospart.img $(BOOT_DIR)/ramdisk.img ::/ramdisk.img
-
-	# 3. Create Hybrid ISO
+	# 2. Create Hybrid ISO
 	mv esp.img iso/esp.img
-	mv ospart.img iso/ospart.img
 	xorriso -as mkisofs \
 		-R -J -V "OSX2_INSTALL" \
 		-eltorito-platform efi \
 		-e esp.img -no-emul-boot \
 		-append_partition 2 0xef iso/esp.img \
-		-append_partition 3 0x07 iso/ospart.img \
 		-isohybrid-gpt-basdat \
 		-o boot.iso iso/
 	@echo "OSx2 Boot ISO Ready (boot.iso)."

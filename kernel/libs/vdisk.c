@@ -8,6 +8,7 @@ static uint32 vdisk_count = 0;
 void vdisk_init() {
     vdisk_count = 0;
     memset(vdisk_registry, 0, sizeof(vdisk_registry));
+    print("VDisk: Storage Virtualization Layer initialized.\n");
 }
 
 vdisk_t* vdisk_open(const char* name) {

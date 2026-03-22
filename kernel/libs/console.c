@@ -23,6 +23,7 @@ void console_init() {
             kboot_params.framebuffer[i] = bg_color;
         }
     }
+    print("Console: Freestanding Graphics Driver initialized.\n");
 }
 
 void console_clear() {

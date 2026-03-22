@@ -13,6 +13,7 @@ static free_block_t* free_list = (void*)0;
 void memory_init() {
     heap_ptr = 0;
     free_list = (void*)0;
+    print("Memory: ARC Management Service initialized.\n");
 }
 
 void* alloc(uint64 size) {

@@ -55,6 +55,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     serial_print("OSx2: UEFI Entry Point reached.\n");
 
     /* 1. Get Graphics Info */
+    Print(L"EFI: Initializing Graphics (GOP)...\n");
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
     status = SystemTable->BootServices->LocateProtocol(&gop_g, (void*)0, (void**)&gop);
     if (status == EFI_SUCCESS) {
@@ -62,70 +63,42 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         params.width = gop->Mode->Info->HorizontalResolution;
         params.height = gop->Mode->Info->VerticalResolution;
         params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
+        Print(L"EFI: Graphics initialized (%ux%u).\n", params.width, params.height);
     }
 
     /* 2. Load Shell */
+    Print(L"EFI: Retrieving Protocols...\n");
     EFI_LOADED_IMAGE_PROTOCOL *li;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
     EFI_FILE_PROTOCOL *root;
 
-    status = SystemTable->BootServices->HandleProtocol(ImageHandle, &li_g, (void**)&li);
+    status = SystemTable->BootServices->OpenProtocol(ImageHandle, &li_g, (void**)&li, ImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
     if (status != EFI_SUCCESS) {
         Print(L"FATAL: LoadedImage Protocol Failed! %r\n", status);
         while(1);
     }
 
     fs = NULL;
-    status = SystemTable->BootServices->HandleProtocol(li->DeviceHandle, &fs_g, (void**)&fs);
+    status = SystemTable->BootServices->OpenProtocol(li->DeviceHandle, &fs_g, (void**)&fs, ImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
     if (status != EFI_SUCCESS || fs == NULL) {
         Print(L"Opaque Error: FileSystem is NULL! (Status: %r)\n", status);
         Print(L"This usually means the boot partition is not correctly recognized.\n");
         while(1);
     }
 
+    Print(L"EFI: Opening Boot Volume...\n");
     status = fs->OpenVolume(fs, &root);
     if (status != EFI_SUCCESS || root == NULL) {
         Print(L"Opaque Error: Root Volume is NULL! (Status: %r)\n", status);
         while(1);
     }
 
-    /* Multi-Partition Discovery Loop */
-    EFI_HANDLE* handles;
-    UINTN num_handles;
-    status = SystemTable->BootServices->LocateHandleBuffer(ByProtocol, &fs_g, NULL, &num_handles, &handles);
-
-    EFI_FILE_PROTOCOL* os_root = NULL;
-    if (status == EFI_SUCCESS) {
-        for (UINTN i = 0; i < num_handles; i++) {
-            EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* test_fs;
-            if (SystemTable->BootServices->HandleProtocol(handles[i], &fs_g, (void**)&test_fs) == EFI_SUCCESS) {
-                EFI_FILE_PROTOCOL* test_root;
-                if (test_fs->OpenVolume(test_fs, &test_root) == EFI_SUCCESS) {
-                    EFI_FILE_PROTOCOL* test_file;
-                    if (test_root->Open(test_root, &test_file, L"os2.bin", EFI_FILE_MODE_READ, 0) == EFI_SUCCESS) {
-                        os_root = test_root;
-                        test_file->Close(test_file);
-                        Print(L"Found OS Partition!\n");
-                        break;
-                    }
-                    test_root->Close(test_root);
-                }
-            }
-        }
-    }
-
-    if (!os_root) {
-        Print(L"Warning: os2.bin not found in multi-volume search. Falling back to boot volume.\n");
-        os_root = root;
-    } else {
-        /* Close the original ESP root if we found a better volume */
-        if (os_root != root) root->Close(root);
-    }
-
-    if (handles) SystemTable->BootServices->FreePool(handles);
+    /* Single-Partition Strategy: os2.bin is on the same volume as the loader */
+    EFI_FILE_PROTOCOL* os_root = root;
 
     /* Load Kernel (Sheep) at 48MB (or wherever specified) */
     /* Using EfiLoaderCode for execution compatibility */
+    Print(L"EFI: Loading Kernel (os2.bin)...\n");
     UINT64 shell_size = 0;
     void* shell_base = NULL;
 
@@ -141,18 +114,21 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     if (status == EFI_SUCCESS) {
         params.shell_size = (uint64)shell_size;
         params.shell_base = shell_base;
+        Print(L"EFI: Kernel loaded at %p (%lu bytes).\n", params.shell_base, params.shell_size);
     } else {
         Print(L"Warning: os2.bin not found on OS partition. %r\n", status);
     }
 
     /* 3. Prepare System Disk (Ramdisk) */
     /* Attempt to load ramdisk.img from boot volume, otherwise create blank */
+    Print(L"EFI: Preparing RAM Disk...\n");
     UINT64 ramdisk_size = 512 * 1024 * 1024; /* Support up to 512MB ramdisk */
     void* ramdisk_base = NULL;
     status = load_file(SystemTable, os_root, L"ramdisk.img", 0, AllocateAnyPages, EfiLoaderData, &ramdisk_size, &ramdisk_base);
     params.ramdisk_size = (uint64)ramdisk_size;
     if (status == EFI_SUCCESS) {
         params.ramdisk_base = ramdisk_base;
+        Print(L"EFI: RAM Disk loaded at %p (%lu bytes).\n", params.ramdisk_base, params.ramdisk_size);
     } else {
         /* Create fallback zeroed ramdisk */
         EFI_PHYSICAL_ADDRESS disk_addr = 0;
@@ -167,6 +143,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     }
 
     /* 4. Allocate Heap */
+    Print(L"EFI: Allocating Kernel Heap...\n");
     UINTN heap_size = (UINTN)CONFIG_HEAP_SIZE_MB * 1024 * 1024;
     EFI_PHYSICAL_ADDRESS heap_addr = 0;
     UINTN heap_pages = (heap_size + 4095) / 4096;
@@ -177,12 +154,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         /* Zero the heap */
         UINT8* p = (UINT8*)params.heap_base;
         for (UINT64 i = 0; i < (UINT64)heap_size; i++) p[i] = 0;
+        Print(L"EFI: Heap allocated at %p (%lu MB).\n", params.heap_base, (uint64)CONFIG_HEAP_SIZE_MB);
     }
 
     params.SystemTable = SystemTable;
     params.ImageHandle = ImageHandle;
 
-    Print(L"Exiting Boot Services and jumping to kernel_main...\n");
+    Print(L"EFI: Handover complete. Exiting Boot Services...\n");
 
     /* 5. Exit Boot Services with Retry Loop */
     UINTN map_size = 0, map_key = 0, descriptor_size = 0;
@@ -201,9 +179,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         if (status == EFI_SUCCESS) {
             status = SystemTable->BootServices->ExitBootServices(ImageHandle, map_key);
             if (status == EFI_SUCCESS) {
+                /* SUCCESS: No more Boot Services calls allowed! */
                 kernel_main(&params);
             }
         }
+        /* Only free pool if ExitBootServices failed */
         SystemTable->BootServices->FreePool(map_buffer);
         map_buffer = NULL;
     }

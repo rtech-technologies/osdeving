@@ -24,6 +24,7 @@ void diskman_init() {
              print("Diskman: No GPT found on ramdisk. Assuming single volume.\n");
         }
     }
+    print("Diskman: Partition Management Service initialized.\n");
 }
 
 void diskman_add_partition(uint64 start, uint32 count) {
