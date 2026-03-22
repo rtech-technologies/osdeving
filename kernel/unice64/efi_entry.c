@@ -187,6 +187,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
             if (status == EFI_SUCCESS) {
                 /* SUCCESS: No more Boot Services calls allowed! */
                 kernel_main(&params);
+                /* The kernel should never return. If it does, we must not call UEFI services. */
+                while(1) { __asm__ volatile("hlt"); }
             }
         }
         /* Only free pool if ExitBootServices failed */
@@ -194,6 +196,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         map_buffer = NULL;
     }
 
+    /* We can only use UEFI print if ExitBootServices failed all retries */
     Print(L"FATAL: ExitBootServices failed after retries!\n");
     while(1) { __asm__ volatile("hlt"); }
     return EFI_SUCCESS;
