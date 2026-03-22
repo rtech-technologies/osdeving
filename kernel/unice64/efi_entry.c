@@ -4,7 +4,6 @@
 #include "../../include/types.h"
 #include "../../include/rsl.h"
 #include "../libs/kutils.h"
-#include "../libs/console.h"
 #include "kernel.h"
 
 static EFI_GUID li_g = LOADED_IMAGE_PROTOCOL;
@@ -65,11 +64,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         params.height = gop->Mode->Info->VerticalResolution;
         params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
         Print(L"EFI: Graphics initialized (%ux%u).\n", params.width, params.height);
-
-        /* Handover to kernel's own graphics driver for early diagnostics */
-        kboot_params = params;
-        console_init();
-        print("OSx2: GOP -> Freestanding Console initialized successfully.\n");
     }
 
     /* 2. Load Shell */

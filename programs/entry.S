@@ -4,30 +4,28 @@
 
 _start:
     /*
-     * Handover from UEFI (Microsoft x64 ABI):
-     * RCX = boot_params_t*
-     * RDX = rsl_syscall_table_t*
+     * Handover from OSx2 Kernel (System V ABI):
+     * RDI = boot_params_t*
+     * RSI = rsl_syscall_table_t*
      */
 
     /* Serial Heartbeat 'A' (Assembly Entry) */
-    /* Preserve RCX/RDX across IO operation */
-    push %rcx
-    push %rdx
+    /* Preserve RDI/RSI across IO operation */
+    push %rdi
+    push %rsi
 
     mov $0x3F8, %dx
     mov $'A', %al
     out %al, %dx
 
-    pop %rdx
-    pop %rcx
+    pop %rsi
+    pop %rdi
 
     /*
-     * Translate to System V ABI (for programs/kernel_entry):
+     * Already in System V ABI:
      * RDI = arg0 (boot_params_t*)
      * RSI = arg1 (rsl_syscall_table_t*)
      */
-    mov %rcx, %rdi
-    mov %rdx, %rsi
 
     /* Call C entry */
     jmp kernel_entry
