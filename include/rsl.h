@@ -19,8 +19,6 @@ typedef struct {
     uint64  shell_size;
     void*   heap_base;
     uint64  heap_size;
-    void*   SystemTable;
-    void*   ImageHandle;
 } boot_params_t;
 
 typedef struct {

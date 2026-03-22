@@ -12,6 +12,11 @@ void strcpy(char* dst, const char* src) {
     while ((*dst++ = *src++));
 }
 
+void k_strcat(char* dst, const char* src) {
+    while (*dst) dst++;
+    while ((*dst++ = *src++));
+}
+
 uint64 k_strlen(const char* s) {
     uint64 len = 0;
     while (*s++) len++;

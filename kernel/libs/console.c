@@ -36,7 +36,7 @@ void console_set_color(uint32 fg, uint32 bg) {
 }
 
 static void scroll() {
-    if (!kboot_params.framebuffer) return;
+    if (!kboot_params.framebuffer || (uint64)kboot_params.framebuffer == 0) return;
     uint32 row_size = kboot_params.pixels_per_scanline * 4;
     uint32 total_rows = kboot_params.height;
     uint32 scroll_amount = CONFIG_SCROLL_SPEED;
@@ -54,7 +54,7 @@ static void scroll() {
 }
 
 static void draw_char(char c, uint32 x, uint32 y, uint32 color) {
-    if (!kboot_params.framebuffer) return;
+    if (!kboot_params.framebuffer || (uint64)kboot_params.framebuffer == 0) return;
     if ((uint8)c >= 128) return;
     const uint8* glyph = font8x8_basic[(uint8)c];
     for (int i = 0; i < 8; i++) {
@@ -71,6 +71,7 @@ static void draw_char(char c, uint32 x, uint32 y, uint32 color) {
 }
 
 void print(const char* str) {
+    if (!kboot_params.framebuffer || (uint64)kboot_params.framebuffer == 0) return;
     while (*str) {
         if (*str == '\n') {
             cursor_x = 0;

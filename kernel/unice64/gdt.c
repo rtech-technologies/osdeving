@@ -45,9 +45,10 @@ void gdt_init() {
         "mov $0x10, %%ax\n"
         "mov %%ax, %%ds\n"
         "mov %%ax, %%es\n"
+        "mov %%ax, %%ss\n"
+        "mov $0x00, %%ax\n"   /* GS/FS are often kept at 0 in simple kernels */
         "mov %%ax, %%fs\n"
         "mov %%ax, %%gs\n"
-        "mov %%ax, %%ss\n"
         : : : "rax", "memory"
     );
 }

@@ -5,6 +5,7 @@
 
 int strcmp(const char* s1, const char* s2);
 void strcpy(char* dst, const char* src);
+void k_strcat(char* dst, const char* src);
 uint64 k_strlen(const char* s);
 void k_memcpy(void* dst, const void* src, uint64 n);
 void k_memset(void* s, int c, uint64 n);
@@ -18,5 +19,6 @@ void serial_print(const char* str);
 #define memcpy k_memcpy
 #define memset k_memset
 #define strlen k_strlen
+#define strcat k_strcat
 
 #endif

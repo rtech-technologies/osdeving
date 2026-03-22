@@ -157,9 +157,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         Print(L"EFI: Heap allocated at %p (%lu MB).\n", params.heap_base, (uint64)CONFIG_HEAP_SIZE_MB);
     }
 
-    params.SystemTable = SystemTable;
-    params.ImageHandle = ImageHandle;
-
     Print(L"EFI: Handover complete. Exiting Boot Services...\n");
 
     /* 5. Exit Boot Services with Retry Loop */
@@ -184,10 +181,14 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
                 /* The kernel should never return. If it does, we must not call UEFI services. */
                 while(1) { __asm__ volatile("hlt"); }
             }
+            /* ONLY free if ExitBootServices failed */
+            SystemTable->BootServices->FreePool(map_buffer);
+            map_buffer = NULL;
+        } else {
+            /* map_buffer allocation failed or GetMemoryMap failed */
+            if (map_buffer) SystemTable->BootServices->FreePool(map_buffer);
+            map_buffer = NULL;
         }
-        /* Only free pool if ExitBootServices failed */
-        SystemTable->BootServices->FreePool(map_buffer);
-        map_buffer = NULL;
     }
 
     /* We can only use UEFI print if ExitBootServices failed all retries */

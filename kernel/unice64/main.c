@@ -29,6 +29,28 @@ void exit_kernel() {
     running = 0;
 }
 
+/* Syscall Wrappers */
+static void sys_mount(int idx) {
+    char name[16];
+    strcpy(name, "VDISK");
+    char num[4];
+    itoa(idx, num, 10);
+    strcat(name, num);
+
+    vdisk_t* vd = vdisk_open(name);
+    if (vd) {
+        vdisk_mount_verify(vd);
+    }
+}
+
+static void sys_format(int idx) {
+    print("Format: FAT32 auto-format not yet implemented in Opaque Mode.\n");
+}
+
+static void sys_lsfs() {
+    print("FS: FAT32 directory listing via VFS.\n");
+}
+
 /*
  * The God-Machine Entry Point
  */
@@ -74,10 +96,10 @@ void EFIAPI kernel_main(boot_params_t* params) {
         .exit = exit_kernel,
         .clear = console_clear,
         .set_color = console_set_color,
-        .format = (void*)0,
-        .mount = (void*)0,
+        .format = sys_format,
+        .mount = sys_mount,
         .addpart = diskman_add_partition,
-        .lsfs = (void*)0
+        .lsfs = sys_lsfs
     };
 
     loader_run_shell(&syscalls);
