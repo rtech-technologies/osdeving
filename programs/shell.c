@@ -12,7 +12,7 @@ int program_main() {
     color(0x00FF88, 0x000000);
     print("OSx2 (RTECH dos) - Kernel Expert Mode (64-bit)\n");
     print("Partition Table: GPT (GUID Partition Table)\n");
-    print("Permanent Storage: RNAFS (Proprietary)\n\n");
+    print("Permanent Storage: FAT32 (Opaque Mode)\n\n");
 
     while (1) {
         char* input_str = readline("> ");
@@ -27,12 +27,12 @@ int program_main() {
 static void handle_command(char* cmd) {
     if (strcmp(cmd, "help") == 0) {
         print("Commands:\n");
-        print("  lsfs          - List files on mounted RNAFS\n");
+        print("  lsfs          - List files on mounted FAT32\n");
         print("  cat [file]    - Read file content\n");
         print("  write [f] [t] - Write text to file\n");
         print("  addpart [s] [c]- Add GPT partition (Start LBA, Count)\n");
-        print("  format [idx]  - Format GPT partition with RNAFS\n");
-        print("  mount [idx]   - Mount RNAFS partition\n");
+        print("  format [idx]  - Format GPT partition with FAT32\n");
+        print("  mount [idx]   - Mount FAT32 partition\n");
         print("  clear         - Clear screen\n");
         print("  exit          - Shutdown\n");
     } else if (strcmp(cmd, "exit") == 0) {
@@ -61,7 +61,7 @@ static void handle_command(char* cmd) {
                 print(buf);
                 print("\n");
             } else {
-                print("Error: File not found or RNAFS not mounted.\n");
+                print("Error: File not found or FAT32 not mounted.\n");
             }
             release(buf);
         }

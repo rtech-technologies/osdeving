@@ -51,9 +51,9 @@ This document provides an exhaustive, low-level technical specification of the O
 ### `kernel/libs/diskman.c`
 - **Purpose**: Partition management. Parses GPT (GUID Partition Table) headers and manages VDISK partition mapping.
 
-### `kernel/libs/rnafs.c` (Proprietary FS)
-- **Purpose**: Contiguous filesystem on VDISKs.
-- **In-Code Logic**: Uses a bitmap for block management. `rnafs_write` performs contiguous allocation and updates the directory entries. Fixed a critical bug where overwrites leaked blocks; it now deallocates old blocks before re-writing.
+### `kernel/libs/fs.c` (FAT32 Opaque FS)
+- **Purpose**: Universal filesystem layer for VDISKs.
+- **In-Code Logic**: Implements a standard FAT32-compatible driver that operates through the VDISK abstraction. This ensures the system can read and write to standard partitions created by external tools like `mtools`.
 
 ### `kernel/libs/console.c`
 - **Purpose**: Graphics-mode text rendering. Draws 8x8 font characters directly to the GOP framebuffer.
