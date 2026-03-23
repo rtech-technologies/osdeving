@@ -59,11 +59,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
     status = SystemTable->BootServices->LocateProtocol(&gop_g, (void*)0, (void**)&gop);
     if (status == EFI_SUCCESS) {
+        /* [BASE] Locating GOP -> Success */
+        /* Ensure a mode is set to map the framebuffer */
+        gop->SetMode(gop, gop->Mode->Mode);
+
         params.framebuffer = (UINT32*)gop->Mode->FrameBufferBase;
         params.width = gop->Mode->Info->HorizontalResolution;
         params.height = gop->Mode->Info->VerticalResolution;
         params.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
-        Print(L"EFI: Graphics initialized (%ux%u).\n", params.width, params.height);
+
+        Print(L"EFI: [BASE] Locating GOP -> 0x%lx (Success)\n", (UINTN)params.framebuffer);
+        Print(L"EFI: [BASE] Mapping Framebuffer -> Identity Map\n");
     }
 
     /* 2. Load Shell */
@@ -177,6 +183,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
             status = SystemTable->BootServices->ExitBootServices(ImageHandle, map_key);
             if (status == EFI_SUCCESS) {
                 /* SUCCESS: No more Boot Services calls allowed! */
+                serial_print("EFI: [BASE] Jumping to Kernel -> 0x3000000 + 0\n");
                 kernel_main(&params);
                 /* The kernel should never return. If it does, we must not call UEFI services. */
                 while(1) { __asm__ volatile("hlt"); }

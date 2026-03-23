@@ -28,7 +28,7 @@ EFI_CRT0 = /usr/lib/crt0-efi-x86_64.o
 CFLAGS_EFI = -Iinclude -fno-stack-protector -mno-red-zone -Wall -fno-builtin -m64 -O$(CONFIG_OPTIMIZATION) \
              -fpic -fshort-wchar -DEFI_FUNCTION_WRAPPER -I/usr/include/efi -I/usr/include/efi/x86_64 -I/usr/include/efi/protocol
 
-LDFLAGS_EFI = -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
+LDFLAGS_EFI = -nostdlib -znocombreloc -z max-page-size=0x1000 -T $(EFI_LDS) -shared -Bsymbolic -L $(EFI_LIB) $(EFI_CRT0)
 LDFLAGS_SHELL = -nostdlib -T programs/linker.ld
 
 LIBS_EFI = -lefi -lgnuefi
@@ -94,6 +94,8 @@ $(LIBS_DIR)/core/%.o: $(LIBS_DIR)/core/%.c $(HEADERS)
 # Programs (Pure Flat Binary)
 $(BOOT_DIR)/os2.bin: os2.elf
 	$(OBJCOPY) -O binary --strip-all os2.elf $(BOOT_DIR)/os2.bin
+	@# Pad to 4KB boundary
+	@truncate -s %4096 $(BOOT_DIR)/os2.bin
 
 os2.elf: $(SHELL_OBJS)
 	$(LD) $(LDFLAGS_SHELL) $(SHELL_OBJS) -o os2.elf
