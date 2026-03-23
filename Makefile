@@ -77,7 +77,8 @@ $(EFI_DIR)/BOOTX64.EFI: kernel.so
 	@mkdir -p $(EFI_DIR)
 	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic \
 	           -j .dynsym  -j .rel -j .rela -j .reloc \
-	           -j .rodata* --target=efi-app-x86_64 kernel.so $(EFI_DIR)/BOOTX64.EFI
+	           -j .rodata* --target=efi-app-x86_64 \
+	           --section-alignment 4096 kernel.so $(EFI_DIR)/BOOTX64.EFI
 
 kernel.so: $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS_EFI) $(KERNEL_OBJS) -o kernel.so $(LIBS_EFI)
