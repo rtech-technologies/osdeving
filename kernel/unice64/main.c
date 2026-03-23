@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "paging.h"
 #include "../../include/rsl.h"
 #include "../libs/console.h"
 #include "../libs/kutils.h"
@@ -64,6 +65,9 @@ void EFIAPI kernel_main(boot_params_t* params) {
 
     /* GDT and Interrupts are usually reset after ExitBootServices for full control */
     gdt_init();
+
+    /* Transition to Sovereign Paging before initializing console */
+    paging_init();
 
     register_service(console_init);
     register_service(memory_init);

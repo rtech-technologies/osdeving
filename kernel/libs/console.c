@@ -18,10 +18,14 @@ void console_init() {
     fg_color = CONFIG_FG_COLOR;
     #endif
     bg_color = CONFIG_BG_COLOR;
-    if (kboot_params.framebuffer) {
+    if (kboot_params.framebuffer && (uint64)kboot_params.framebuffer != 0) {
         for (uint32 i = 0; i < kboot_params.height * kboot_params.pixels_per_scanline; i++) {
             kboot_params.framebuffer[i] = bg_color;
         }
+
+        /* [BASE] Emerald Signature: Single pixel at (0,0) */
+        kboot_params.framebuffer[0] = 0x00FF88;
+        serial_print("EFI: RSL_PRINT_START (Emerald Signature confirmed)\n");
     }
     print("Console: Freestanding Graphics Driver initialized.\n");
 }

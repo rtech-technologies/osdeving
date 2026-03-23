@@ -37,6 +37,7 @@ LIBS_EFI = -lefi -lgnuefi
 KERNEL_OBJS = $(KERNEL_DIR)/efi_entry.o \
               $(KERNEL_DIR)/main.o \
               $(KERNEL_DIR)/gdt.o \
+              $(KERNEL_DIR)/paging.o \
               $(LIBS_DIR)/kutils.o \
               $(LIBS_DIR)/console.o \
               $(LIBS_DIR)/font_data.o \
